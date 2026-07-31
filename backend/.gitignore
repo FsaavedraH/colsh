@@ -11,3 +11,6 @@ coverage.out
 
 .vscode/
 .idea/
+
+body.json
+body_invalido.json

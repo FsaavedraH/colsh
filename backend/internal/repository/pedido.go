@@ -1,0 +1,64 @@
+package repository
+
+import (
+	"context"
+
+	"github.com/FsaavedraH/colsh/backend/internal/domain"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type PedidoRepository struct {
+	Pool *pgxpool.Pool
+}
+
+type ProductoPedidoInput struct {
+	IDProducto string
+	Cantidad   int
+}
+
+func (r *PedidoRepository) Crear(ctx context.Context, pedido *domain.Pedido, productos []ProductoPedidoInput) error {
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx,
+		`INSERT INTO pedido (id_pedido, fecha_creacion, estado, id_cliente, direccion_entrega)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		pedido.IDPedido, pedido.FechaCreacion, pedido.Estado, pedido.IDCliente, pedido.DireccionEntrega,
+	)
+	if err != nil {
+		return err
+	}
+
+	for _, p := range productos {
+		idProducto, err := uuid.Parse(p.IDProducto)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx,
+			`INSERT INTO detalle_pedido (id_detalle, id_pedido, id_producto, cantidad)
+			 VALUES ($1, $2, $3, $4)`,
+			uuid.New(), pedido.IDPedido, idProducto, p.Cantidad,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *PedidoRepository) ConsultarPorID(ctx context.Context, id uuid.UUID) (*domain.Pedido, error) {
+	var p domain.Pedido
+	err := r.Pool.QueryRow(ctx,
+		`SELECT id_pedido, fecha_creacion, estado, id_cliente, direccion_entrega
+		 FROM pedido WHERE id_pedido = $1`, id,
+	).Scan(&p.IDPedido, &p.FechaCreacion, &p.Estado, &p.IDCliente, &p.DireccionEntrega)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
