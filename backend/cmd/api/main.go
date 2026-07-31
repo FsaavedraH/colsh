@@ -41,11 +41,20 @@ func main() {
 	inventarioRepo := &repository.InventarioRepository{Pool: pool}
 	inventarioHandler := &handler.InventarioHandler{InventarioRepo: inventarioRepo, PedidoRepo: pedidoRepo}
 
+	pickingHandler := &handler.PickingHandler{PedidoRepo: pedidoRepo, InventarioRepo: inventarioRepo}
+
 	r := chi.NewRouter()
+
 	r.Post("/api/pedidos", pedidoHandler.CrearPedido)
 	r.Get("/api/pedidos/{id}", pedidoHandler.ConsultarPedido)
+
 	r.Post("/api/inventario/validar", inventarioHandler.ValidarInventario)
 	r.Post("/api/inventario/actualizar", inventarioHandler.ActualizarInventario)
+
+	r.Get("/api/picking", pickingHandler.ListarOrdenes)
+	r.Post("/api/picking/escanear-ubicacion", pickingHandler.EscanearUbicacion)
+	r.Post("/api/picking/escanear-producto", pickingHandler.EscanearProducto)
+	r.Post("/api/recoleccion", pickingHandler.ConfirmarRecoleccion)
 
 	port := os.Getenv("PORT")
 	if port == "" {

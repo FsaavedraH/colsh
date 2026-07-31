@@ -54,3 +54,15 @@ func (r *InventarioRepository) ActualizarStock(ctx context.Context, idProducto u
 	)
 	return err
 }
+
+// RF-11: obtiene la ubicacion esperada de un producto, para comparar contra el escaneo
+func (r *InventarioRepository) ObtenerUbicacion(ctx context.Context, idProducto uuid.UUID) (string, error) {
+	var ubicacion string
+	err := r.Pool.QueryRow(ctx,
+		`SELECT ubicacion FROM inventario WHERE id_producto = $1 LIMIT 1`, idProducto,
+	).Scan(&ubicacion)
+	if err != nil {
+		return "", err
+	}
+	return ubicacion, nil
+}

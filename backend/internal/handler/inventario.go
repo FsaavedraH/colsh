@@ -57,9 +57,15 @@ func (h *InventarioHandler) ValidarInventario(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// RF-09: al confirmar disponibilidad, el pedido pasa a "En recoleccion"
+	if err := h.PedidoRepo.ActualizarEstado(r.Context(), idPedido, "En recoleccion"); err != nil {
+		http.Error(w, `{"error":"No se pudo actualizar el estado del pedido"}`, http.StatusInternalServerError)
+		return
+	}
+
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"disponibilidad": true,
-		"estado_pedido":  "Pendiente",
+		"estado_pedido":  "En recoleccion",
 	})
 }
 
