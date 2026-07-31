@@ -14,3 +14,4 @@ coverage.out
 
 body.json
 body_invalido.json
+body*.json

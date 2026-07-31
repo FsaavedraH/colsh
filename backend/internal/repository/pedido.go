@@ -62,3 +62,35 @@ func (r *PedidoRepository) ConsultarPorID(ctx context.Context, id uuid.UUID) (*d
 	}
 	return &p, nil
 }
+
+func (r *PedidoRepository) ActualizarEstado(ctx context.Context, id uuid.UUID, nuevoEstado string) error {
+	_, err := r.Pool.Exec(ctx,
+		`UPDATE pedido SET estado = $1 WHERE id_pedido = $2`,
+		nuevoEstado, id,
+	)
+	return err
+}
+
+func (r *PedidoRepository) ObtenerProductosDelPedido(ctx context.Context, idPedido uuid.UUID) ([]ProductoPedidoInput, error) {
+	rows, err := r.Pool.Query(ctx,
+		`SELECT id_producto, cantidad FROM detalle_pedido WHERE id_pedido = $1`, idPedido,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var productos []ProductoPedidoInput
+	for rows.Next() {
+		var idProducto uuid.UUID
+		var cantidad int
+		if err := rows.Scan(&idProducto, &cantidad); err != nil {
+			return nil, err
+		}
+		productos = append(productos, ProductoPedidoInput{
+			IDProducto: idProducto.String(),
+			Cantidad:   cantidad,
+		})
+	}
+	return productos, nil
+}

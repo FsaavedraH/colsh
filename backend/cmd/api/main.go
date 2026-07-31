@@ -38,9 +38,14 @@ func main() {
 	pedidoRepo := &repository.PedidoRepository{Pool: pool}
 	pedidoHandler := &handler.PedidoHandler{Repo: pedidoRepo}
 
+	inventarioRepo := &repository.InventarioRepository{Pool: pool}
+	inventarioHandler := &handler.InventarioHandler{InventarioRepo: inventarioRepo, PedidoRepo: pedidoRepo}
+
 	r := chi.NewRouter()
 	r.Post("/api/pedidos", pedidoHandler.CrearPedido)
 	r.Get("/api/pedidos/{id}", pedidoHandler.ConsultarPedido)
+	r.Post("/api/inventario/validar", inventarioHandler.ValidarInventario)
+	r.Post("/api/inventario/actualizar", inventarioHandler.ActualizarInventario)
 
 	port := os.Getenv("PORT")
 	if port == "" {
