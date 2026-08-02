@@ -53,7 +53,6 @@ func (h *PickingHandler) EscanearUbicacion(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/json")
 
-	// RF-26: si no coincide, alerta sin cambiar ningun estado
 	if req.UbicacionEscaneada != ubicacionEsperada {
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -87,7 +86,6 @@ func (h *PickingHandler) EscanearProducto(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "application/json")
 
-	// RF-13, RF-26: validacion automatica - si no coincide, alerta sin cambiar estado
 	if req.IDProductoEscaneado != req.IDProductoEsperado {
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -109,7 +107,7 @@ type ConfirmarRecoleccionRequest struct {
 	Cantidad   int    `json:"cantidad"`
 }
 
-// POST /api/recoleccion - RF-14 (via InventarioRepo), confirma y descuenta stock
+// POST /api/recoleccion - RF-14, RF-15
 func (h *PickingHandler) ConfirmarRecoleccion(w http.ResponseWriter, r *http.Request) {
 	var req ConfirmarRecoleccionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -132,6 +130,12 @@ func (h *PickingHandler) ConfirmarRecoleccion(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		http.Error(w, `{"error":"No se pudo actualizar el inventario: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
+	}
+
+	idPedido, err := uuid.Parse(req.IDPedido)
+	if err == nil {
+		// RF-15: notificar pedido listo para empaque
+		h.PedidoRepo.ActualizarEstado(r.Context(), idPedido, "En empaque")
 	}
 
 	w.Header().Set("Content-Type", "application/json")
