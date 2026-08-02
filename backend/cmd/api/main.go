@@ -46,6 +46,9 @@ func main() {
 	empaqueRepo := &repository.EmpaqueRepository{Pool: pool}
 	empaqueHandler := &handler.EmpaqueHandler{PedidoRepo: pedidoRepo, EmpaqueRepo: empaqueRepo}
 
+	despachoRepo := &repository.DespachoRepository{Pool: pool}
+	despachoHandler := &handler.DespachoHandler{PedidoRepo: pedidoRepo, DespachoRepo: despachoRepo}
+
 	r := chi.NewRouter()
 
 	r.Post("/api/pedidos", pedidoHandler.CrearPedido)
@@ -62,6 +65,9 @@ func main() {
 	r.Post("/api/empaque/recepcion", empaqueHandler.RecepcionEmpaque)
 	r.Post("/api/empaque/escanear", empaqueHandler.EscanearValidacion)
 	r.Post("/api/empaque", empaqueHandler.ConfirmarEmpaque)
+
+	r.Post("/api/despacho", despachoHandler.GenerarDespacho)
+	r.Post("/api/entrega", despachoHandler.ConfirmarEntrega)
 
 	port := os.Getenv("PORT")
 	if port == "" {
