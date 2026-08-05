@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
+	"github.com/FsaavedraH/colsh/backend/internal/ledger"
 	"github.com/FsaavedraH/colsh/backend/internal/repository"
 	"github.com/google/uuid"
 )
@@ -11,6 +14,21 @@ import (
 type PickingHandler struct {
 	PedidoRepo     *repository.PedidoRepository
 	InventarioRepo *repository.InventarioRepository
+	Ledger         *ledger.LedgerAdapter
+}
+
+// registrarEnLedgerSiDisponible intenta registrar el evento en Fabric.
+// Si el ledger no esta disponible (Escenario 3, RT-06), no interrumpe el flujo.
+func (h *PickingHandler) registrarEnLedgerSiDisponible(idPedido, estado, responsable string) {
+	if h.Ledger == nil {
+		return
+	}
+	idEvento := uuid.New().String()
+	fecha := time.Now().Format(time.RFC3339)
+	err := h.Ledger.RegistrarEnLedger(context.Background(), idEvento, idPedido, estado, fecha, responsable)
+	if err != nil {
+		// No se interrumpe el flujo operativo si el ledger falla (Escenario 3)
+	}
 }
 
 // GET /api/picking - RF-09, RF-10: lista de ordenes FIFO
@@ -102,12 +120,13 @@ func (h *PickingHandler) EscanearProducto(w http.ResponseWriter, r *http.Request
 }
 
 type ConfirmarRecoleccionRequest struct {
-	IDPedido   string `json:"id_pedido"`
-	IDProducto string `json:"id_producto"`
-	Cantidad   int    `json:"cantidad"`
+	IDPedido     string `json:"id_pedido"`
+	IDProducto   string `json:"id_producto"`
+	Cantidad     int    `json:"cantidad"`
+	Responsable  string `json:"responsable"`
 }
 
-// POST /api/recoleccion - RF-14, RF-15
+// POST /api/recoleccion - RF-14, RF-15, RF-24
 func (h *PickingHandler) ConfirmarRecoleccion(w http.ResponseWriter, r *http.Request) {
 	var req ConfirmarRecoleccionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -136,6 +155,9 @@ func (h *PickingHandler) ConfirmarRecoleccion(w http.ResponseWriter, r *http.Req
 	if err == nil {
 		// RF-15: notificar pedido listo para empaque
 		h.PedidoRepo.ActualizarEstado(r.Context(), idPedido, "En empaque")
+
+		// RF-24: registrar el evento de recoleccion en el ledger
+		h.registrarEnLedgerSiDisponible(req.IDPedido, "En recoleccion", req.Responsable)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

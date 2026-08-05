@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
+	"github.com/FsaavedraH/colsh/backend/internal/ledger"
 	"github.com/FsaavedraH/colsh/backend/internal/repository"
 	"github.com/google/uuid"
 )
@@ -11,6 +14,18 @@ import (
 type EmpaqueHandler struct {
 	PedidoRepo  *repository.PedidoRepository
 	EmpaqueRepo *repository.EmpaqueRepository
+	Ledger      *ledger.LedgerAdapter
+}
+
+// registrarEnLedgerSiDisponible intenta registrar el evento en Fabric.
+// Si el ledger no esta disponible (Escenario 3, RT-06), no interrumpe el flujo.
+func (h *EmpaqueHandler) registrarEnLedgerSiDisponible(idPedido, estado, responsable string) {
+	if h.Ledger == nil {
+		return
+	}
+	idEvento := uuid.New().String()
+	fecha := time.Now().Format(time.RFC3339)
+	_ = h.Ledger.RegistrarEnLedger(context.Background(), idEvento, idPedido, estado, fecha, responsable)
 }
 
 type RecepcionEmpaqueRequest struct {
@@ -81,7 +96,7 @@ type ConfirmarEmpaqueRequest struct {
 	Responsable string `json:"responsable"`
 }
 
-// POST /api/empaque - RF-18
+// POST /api/empaque - RF-18, RF-24
 func (h *EmpaqueHandler) ConfirmarEmpaque(w http.ResponseWriter, r *http.Request) {
 	var req ConfirmarEmpaqueRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -110,6 +125,9 @@ func (h *EmpaqueHandler) ConfirmarEmpaque(w http.ResponseWriter, r *http.Request
 		http.Error(w, `{"error":"No se pudo actualizar el estado del pedido"}`, http.StatusInternalServerError)
 		return
 	}
+
+	// RF-24: registrar el evento de empaque en el ledger
+	h.registrarEnLedgerSiDisponible(req.IDPedido, "En empaque", req.Responsable)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"estado": "empacado"})

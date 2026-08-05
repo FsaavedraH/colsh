@@ -1,10 +1,13 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/FsaavedraH/colsh/backend/internal/ledger"
 	"github.com/FsaavedraH/colsh/backend/internal/repository"
 	"github.com/google/uuid"
 )
@@ -12,6 +15,18 @@ import (
 type DespachoHandler struct {
 	PedidoRepo   *repository.PedidoRepository
 	DespachoRepo *repository.DespachoRepository
+	Ledger       *ledger.LedgerAdapter
+}
+
+// registrarEnLedgerSiDisponible intenta registrar el evento en Fabric.
+// Si el ledger no esta disponible (Escenario 3, RT-06), no interrumpe el flujo.
+func (h *DespachoHandler) registrarEnLedgerSiDisponible(idPedido, estado, responsable string) {
+	if h.Ledger == nil {
+		return
+	}
+	idEvento := uuid.New().String()
+	fecha := time.Now().Format(time.RFC3339)
+	_ = h.Ledger.RegistrarEnLedger(context.Background(), idEvento, idPedido, estado, fecha, responsable)
 }
 
 type GenerarDespachoRequest struct {
@@ -19,7 +34,7 @@ type GenerarDespachoRequest struct {
 	Transportista string `json:"transportista"`
 }
 
-// POST /api/despacho - RF-19, RF-20, RF-21
+// POST /api/despacho - RF-19, RF-20, RF-21, RF-24
 func (h *DespachoHandler) GenerarDespacho(w http.ResponseWriter, r *http.Request) {
 	var req GenerarDespachoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -45,20 +60,19 @@ func (h *DespachoHandler) GenerarDespacho(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// RF-19: generar codigo de seguimiento (simple, basado en el id del pedido)
 	codigoSeguimiento := strings.ToUpper(strings.Split(pedido.IDPedido.String(), "-")[0])
 
-	// RF-20: registrar evento de despacho con el transportador asignado
 	if err := h.DespachoRepo.RegistrarEvento(r.Context(), idPedido, "En despacho", transportista); err != nil {
 		http.Error(w, `{"error":"No se pudo registrar el despacho: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
 
-	// RF-21: actualizar estado del pedido
 	if err := h.PedidoRepo.ActualizarEstado(r.Context(), idPedido, "En despacho"); err != nil {
 		http.Error(w, `{"error":"No se pudo actualizar el estado del pedido"}`, http.StatusInternalServerError)
 		return
 	}
+
+	h.registrarEnLedgerSiDisponible(req.IDPedido, "En despacho", req.Transportista)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -74,7 +88,7 @@ type ConfirmarEntregaRequest struct {
 	Transportista string `json:"transportista"`
 }
 
-// POST /api/entrega - RF-22, RF-23
+// POST /api/entrega - RF-22, RF-23, RF-24
 func (h *DespachoHandler) ConfirmarEntrega(w http.ResponseWriter, r *http.Request) {
 	var req ConfirmarEntregaRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -94,17 +108,17 @@ func (h *DespachoHandler) ConfirmarEntrega(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// RF-22: registrar fecha y hora de entrega final
 	if err := h.DespachoRepo.RegistrarEvento(r.Context(), idPedido, "Entregado", transportista); err != nil {
 		http.Error(w, `{"error":"No se pudo registrar la entrega: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
 
-	// RF-23: cambiar estado a "Entregado"
 	if err := h.PedidoRepo.ActualizarEstado(r.Context(), idPedido, "Entregado"); err != nil {
 		http.Error(w, `{"error":"No se pudo actualizar el estado del pedido"}`, http.StatusInternalServerError)
 		return
 	}
+
+	h.registrarEnLedgerSiDisponible(req.IDPedido, "Entregado", req.Transportista)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"estado": "entregado"})
