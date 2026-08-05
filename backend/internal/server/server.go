@@ -6,6 +6,7 @@ import (
 
 	"github.com/FsaavedraH/colsh/backend/internal/handler"
 	"github.com/FsaavedraH/colsh/backend/internal/ledger"
+	appmw "github.com/FsaavedraH/colsh/backend/internal/middleware"
 	"github.com/FsaavedraH/colsh/backend/internal/repository"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -43,29 +44,38 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 
 	r := chi.NewRouter()
 
-	r.Post("/api/pedidos", pedidoHandler.CrearPedido)
-	r.Get("/api/pedidos/{id}", pedidoHandler.ConsultarPedido)
+	// Pedidos - Cliente crea, cualquiera con rol valido puede consultar
+	r.With(appmw.RequireRole("Cliente")).Post("/api/pedidos", pedidoHandler.CrearPedido)
+	r.With(appmw.RequireRole("Cliente", "Picking", "Empaque", "Transportista", "Administrador")).
+		Get("/api/pedidos/{id}", pedidoHandler.ConsultarPedido)
 
-	r.Post("/api/inventario/validar", inventarioHandler.ValidarInventario)
-	r.Post("/api/inventario/actualizar", inventarioHandler.ActualizarInventario)
+	// Inventario - Picking valida, Picking actualiza tras recoleccion
+	r.With(appmw.RequireRole("Picking", "Administrador")).Post("/api/inventario/validar", inventarioHandler.ValidarInventario)
+	r.With(appmw.RequireRole("Picking", "Administrador")).Post("/api/inventario/actualizar", inventarioHandler.ActualizarInventario)
 
-	r.Get("/api/picking", pickingHandler.ListarOrdenes)
-	r.Post("/api/picking/escanear-ubicacion", pickingHandler.EscanearUbicacion)
-	r.Post("/api/picking/escanear-producto", pickingHandler.EscanearProducto)
-	r.Post("/api/recoleccion", pickingHandler.ConfirmarRecoleccion)
+	// Picking
+	r.With(appmw.RequireRole("Picking", "Administrador")).Get("/api/picking", pickingHandler.ListarOrdenes)
+	r.With(appmw.RequireRole("Picking")).Post("/api/picking/escanear-ubicacion", pickingHandler.EscanearUbicacion)
+	r.With(appmw.RequireRole("Picking")).Post("/api/picking/escanear-producto", pickingHandler.EscanearProducto)
+	r.With(appmw.RequireRole("Picking")).Post("/api/recoleccion", pickingHandler.ConfirmarRecoleccion)
 
-	r.Post("/api/empaque/recepcion", empaqueHandler.RecepcionEmpaque)
-	r.Post("/api/empaque/escanear", empaqueHandler.EscanearValidacion)
-	r.Post("/api/empaque", empaqueHandler.ConfirmarEmpaque)
+	// Empaque
+	r.With(appmw.RequireRole("Empaque")).Post("/api/empaque/recepcion", empaqueHandler.RecepcionEmpaque)
+	r.With(appmw.RequireRole("Empaque")).Post("/api/empaque/escanear", empaqueHandler.EscanearValidacion)
+	r.With(appmw.RequireRole("Empaque")).Post("/api/empaque", empaqueHandler.ConfirmarEmpaque)
 
-	r.Post("/api/despacho", despachoHandler.GenerarDespacho)
-	r.Post("/api/entrega", despachoHandler.ConfirmarEntrega)
+	// Despacho y entrega - Transportista
+	r.With(appmw.RequireRole("Transportista")).Post("/api/despacho", despachoHandler.GenerarDespacho)
+	r.With(appmw.RequireRole("Transportista")).Post("/api/entrega", despachoHandler.ConfirmarEntrega)
 
-	r.Get("/api/trazabilidad/{id_pedido}", trazabilidadHandler.ConsultarTrazabilidad)
+	// Trazabilidad - cualquier rol autenticado puede consultar
+	r.With(appmw.RequireRole("Cliente", "Picking", "Empaque", "Transportista", "Administrador")).
+		Get("/api/trazabilidad/{id_pedido}", trazabilidadHandler.ConsultarTrazabilidad)
 
-	r.Get("/api/reportes/pedidos", reporteHandler.ListarPedidos)
-	r.Get("/api/reportes/tiempos", reporteHandler.TiemposPorEtapa)
-	r.Get("/api/reportes/incidencias", reporteHandler.IndicadorIncidencias)
+	// Reportes - solo Administrador (RF-27, RF-28)
+	r.With(appmw.RequireRole("Administrador")).Get("/api/reportes/pedidos", reporteHandler.ListarPedidos)
+	r.With(appmw.RequireRole("Administrador")).Get("/api/reportes/tiempos", reporteHandler.TiemposPorEtapa)
+	r.With(appmw.RequireRole("Administrador")).Get("/api/reportes/incidencias", reporteHandler.IndicadorIncidencias)
 
 	return r
 }
