@@ -14,11 +14,10 @@ import (
 type EmpaqueHandler struct {
 	PedidoRepo  *repository.PedidoRepository
 	EmpaqueRepo *repository.EmpaqueRepository
+	ReporteRepo *repository.ReporteRepository
 	Ledger      *ledger.LedgerAdapter
 }
 
-// registrarEnLedgerSiDisponible intenta registrar el evento en Fabric.
-// Si el ledger no esta disponible (Escenario 3, RT-06), no interrumpe el flujo.
 func (h *EmpaqueHandler) registrarEnLedgerSiDisponible(idPedido, estado, responsable string) {
 	if h.Ledger == nil {
 		return
@@ -66,7 +65,7 @@ type EscanearValidacionEmpaqueRequest struct {
 	IDProductoEscaneado string `json:"id_producto_escaneado"`
 }
 
-// POST /api/empaque/escanear - RF-17, RF-26
+// POST /api/empaque/escanear - RF-17, RF-26, RF-28
 func (h *EmpaqueHandler) EscanearValidacion(w http.ResponseWriter, r *http.Request) {
 	var req EscanearValidacionEmpaqueRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -74,9 +73,17 @@ func (h *EmpaqueHandler) EscanearValidacion(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	idPedido, err := uuid.Parse(req.IDPedido)
+	if err != nil {
+		http.Error(w, `{"error":"id_pedido invalido"}`, http.StatusBadRequest)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 
 	if req.IDProductoEscaneado != req.IDProductoEsperado {
+		h.ReporteRepo.RegistrarIntentoEscaneo(r.Context(), idPedido, "producto", "incorrecto", "empaque")
+
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"coincide": false,
@@ -84,6 +91,8 @@ func (h *EmpaqueHandler) EscanearValidacion(w http.ResponseWriter, r *http.Reque
 		})
 		return
 	}
+
+	h.ReporteRepo.RegistrarIntentoEscaneo(r.Context(), idPedido, "producto", "correcto", "empaque")
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"coincide": true,
@@ -126,7 +135,6 @@ func (h *EmpaqueHandler) ConfirmarEmpaque(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// RF-24: registrar el evento de empaque en el ledger
 	h.registrarEnLedgerSiDisponible(req.IDPedido, "En empaque", req.Responsable)
 
 	w.Header().Set("Content-Type", "application/json")

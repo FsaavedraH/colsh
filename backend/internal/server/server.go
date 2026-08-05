@@ -11,8 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// NuevoRouter arma todas las dependencias (repositories, handlers, ledger) y devuelve
-// el router HTTP listo para usar. Aisla el "wiring" fuera de main.go.
 func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.Mux {
 	pedidoRepo := &repository.PedidoRepository{Pool: pool}
 	pedidoHandler := &handler.PedidoHandler{Repo: pedidoRepo}
@@ -20,10 +18,23 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 	inventarioRepo := &repository.InventarioRepository{Pool: pool}
 	inventarioHandler := &handler.InventarioHandler{InventarioRepo: inventarioRepo, PedidoRepo: pedidoRepo}
 
-	pickingHandler := &handler.PickingHandler{PedidoRepo: pedidoRepo, InventarioRepo: inventarioRepo, Ledger: ledgerAdapter}
+	reporteRepo := &repository.ReporteRepository{Pool: pool}
+	reporteHandler := &handler.ReporteHandler{ReporteRepo: reporteRepo}
+
+	pickingHandler := &handler.PickingHandler{
+		PedidoRepo:     pedidoRepo,
+		InventarioRepo: inventarioRepo,
+		ReporteRepo:    reporteRepo,
+		Ledger:         ledgerAdapter,
+	}
 
 	empaqueRepo := &repository.EmpaqueRepository{Pool: pool}
-	empaqueHandler := &handler.EmpaqueHandler{PedidoRepo: pedidoRepo, EmpaqueRepo: empaqueRepo, Ledger: ledgerAdapter}
+	empaqueHandler := &handler.EmpaqueHandler{
+		PedidoRepo:  pedidoRepo,
+		EmpaqueRepo: empaqueRepo,
+		ReporteRepo: reporteRepo,
+		Ledger:      ledgerAdapter,
+	}
 
 	despachoRepo := &repository.DespachoRepository{Pool: pool}
 	despachoHandler := &handler.DespachoHandler{PedidoRepo: pedidoRepo, DespachoRepo: despachoRepo, Ledger: ledgerAdapter}
@@ -52,11 +63,13 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 
 	r.Get("/api/trazabilidad/{id_pedido}", trazabilidadHandler.ConsultarTrazabilidad)
 
+	r.Get("/api/reportes/pedidos", reporteHandler.ListarPedidos)
+	r.Get("/api/reportes/tiempos", reporteHandler.TiemposPorEtapa)
+	r.Get("/api/reportes/incidencias", reporteHandler.IndicadorIncidencias)
+
 	return r
 }
 
-// ConectarLedger intenta establecer conexion con Fabric.
-// Devuelve nil si no esta disponible, sin interrumpir el arranque (RT-06, Escenario 3).
 func ConectarLedger() *ledger.LedgerAdapter {
 	adapter, err := ledger.NuevoLedgerAdapter()
 	if err != nil {
@@ -67,7 +80,6 @@ func ConectarLedger() *ledger.LedgerAdapter {
 	return adapter
 }
 
-// VerificarConexionDB confirma que la base de datos responde antes de continuar.
 func VerificarConexionDB(pool *pgxpool.Pool) error {
 	var resultado int
 	err := pool.QueryRow(context.Background(), "SELECT 1").Scan(&resultado)

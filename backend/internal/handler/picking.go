@@ -14,24 +14,20 @@ import (
 type PickingHandler struct {
 	PedidoRepo     *repository.PedidoRepository
 	InventarioRepo *repository.InventarioRepository
+	ReporteRepo    *repository.ReporteRepository
 	Ledger         *ledger.LedgerAdapter
 }
 
-// registrarEnLedgerSiDisponible intenta registrar el evento en Fabric.
-// Si el ledger no esta disponible (Escenario 3, RT-06), no interrumpe el flujo.
 func (h *PickingHandler) registrarEnLedgerSiDisponible(idPedido, estado, responsable string) {
 	if h.Ledger == nil {
 		return
 	}
 	idEvento := uuid.New().String()
 	fecha := time.Now().Format(time.RFC3339)
-	err := h.Ledger.RegistrarEnLedger(context.Background(), idEvento, idPedido, estado, fecha, responsable)
-	if err != nil {
-		// No se interrumpe el flujo operativo si el ledger falla (Escenario 3)
-	}
+	_ = h.Ledger.RegistrarEnLedger(context.Background(), idEvento, idPedido, estado, fecha, responsable)
 }
 
-// GET /api/picking - RF-09, RF-10: lista de ordenes FIFO
+// GET /api/picking - RF-09, RF-10
 func (h *PickingHandler) ListarOrdenes(w http.ResponseWriter, r *http.Request) {
 	ordenes, err := h.PedidoRepo.ListarParaPicking(r.Context())
 	if err != nil {
@@ -49,7 +45,7 @@ type EscanearUbicacionRequest struct {
 	UbicacionEscaneada string `json:"ubicacion_escaneada"`
 }
 
-// POST /api/picking/escanear-ubicacion - RF-11
+// POST /api/picking/escanear-ubicacion - RF-11, RF-28 (registro de intentos)
 func (h *PickingHandler) EscanearUbicacion(w http.ResponseWriter, r *http.Request) {
 	var req EscanearUbicacionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -63,6 +59,12 @@ func (h *PickingHandler) EscanearUbicacion(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	idPedido, err := uuid.Parse(req.IDPedido)
+	if err != nil {
+		http.Error(w, `{"error":"id_pedido invalido"}`, http.StatusBadRequest)
+		return
+	}
+
 	ubicacionEsperada, err := h.InventarioRepo.ObtenerUbicacion(r.Context(), idProducto)
 	if err != nil {
 		http.Error(w, `{"error":"No se pudo obtener la ubicacion del producto"}`, http.StatusInternalServerError)
@@ -72,6 +74,8 @@ func (h *PickingHandler) EscanearUbicacion(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/json")
 
 	if req.UbicacionEscaneada != ubicacionEsperada {
+		h.ReporteRepo.RegistrarIntentoEscaneo(r.Context(), idPedido, "ubicacion", "incorrecto", "picking")
+
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"coincide":            false,
@@ -81,6 +85,8 @@ func (h *PickingHandler) EscanearUbicacion(w http.ResponseWriter, r *http.Reques
 		})
 		return
 	}
+
+	h.ReporteRepo.RegistrarIntentoEscaneo(r.Context(), idPedido, "ubicacion", "correcto", "picking")
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"coincide": true,
@@ -94,7 +100,7 @@ type EscanearProductoRequest struct {
 	IDProductoEscaneado string `json:"id_producto_escaneado"`
 }
 
-// POST /api/picking/escanear-producto - RF-12, RF-13, RF-26
+// POST /api/picking/escanear-producto - RF-12, RF-13, RF-26, RF-28
 func (h *PickingHandler) EscanearProducto(w http.ResponseWriter, r *http.Request) {
 	var req EscanearProductoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -102,9 +108,17 @@ func (h *PickingHandler) EscanearProducto(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	idPedido, err := uuid.Parse(req.IDPedido)
+	if err != nil {
+		http.Error(w, `{"error":"id_pedido invalido"}`, http.StatusBadRequest)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 
 	if req.IDProductoEscaneado != req.IDProductoEsperado {
+		h.ReporteRepo.RegistrarIntentoEscaneo(r.Context(), idPedido, "producto", "incorrecto", "picking")
+
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"coincide": false,
@@ -113,6 +127,8 @@ func (h *PickingHandler) EscanearProducto(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	h.ReporteRepo.RegistrarIntentoEscaneo(r.Context(), idPedido, "producto", "correcto", "picking")
+
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"coincide": true,
 		"mensaje":  "Producto correcto, listo para recolectar",
@@ -120,10 +136,10 @@ func (h *PickingHandler) EscanearProducto(w http.ResponseWriter, r *http.Request
 }
 
 type ConfirmarRecoleccionRequest struct {
-	IDPedido     string `json:"id_pedido"`
-	IDProducto   string `json:"id_producto"`
-	Cantidad     int    `json:"cantidad"`
-	Responsable  string `json:"responsable"`
+	IDPedido    string `json:"id_pedido"`
+	IDProducto  string `json:"id_producto"`
+	Cantidad    int    `json:"cantidad"`
+	Responsable string `json:"responsable"`
 }
 
 // POST /api/recoleccion - RF-14, RF-15, RF-24
@@ -153,10 +169,7 @@ func (h *PickingHandler) ConfirmarRecoleccion(w http.ResponseWriter, r *http.Req
 
 	idPedido, err := uuid.Parse(req.IDPedido)
 	if err == nil {
-		// RF-15: notificar pedido listo para empaque
 		h.PedidoRepo.ActualizarEstado(r.Context(), idPedido, "En empaque")
-
-		// RF-24: registrar el evento de recoleccion en el ledger
 		h.registrarEnLedgerSiDisponible(req.IDPedido, "En recoleccion", req.Responsable)
 	}
 
