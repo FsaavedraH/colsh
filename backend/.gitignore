@@ -17,3 +17,5 @@ body_invalido.json
 body*.json
 
 internal/ledger/certs/
+
+coverage*.out
