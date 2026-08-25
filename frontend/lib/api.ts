@@ -26,7 +26,8 @@ export async function apiFetch<T>(
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
-    throw new Error(errorBody.error || `Error ${res.status} en ${endpoint}`);
+    const mensaje = errorBody.error || errorBody.mensaje || `Error ${res.status} en ${endpoint}`;
+    throw new Error(mensaje);
   }
 
   return res.json();
