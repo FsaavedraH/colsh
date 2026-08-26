@@ -18,8 +18,6 @@ type DespachoHandler struct {
 	Ledger       *ledger.LedgerAdapter
 }
 
-// registrarEnLedgerSiDisponible intenta registrar el evento en Fabric.
-// Si el ledger no esta disponible (Escenario 3, RT-06), no interrumpe el flujo.
 func (h *DespachoHandler) registrarEnLedgerSiDisponible(idPedido, estado, responsable string) {
 	if h.Ledger == nil {
 		return
@@ -27,6 +25,18 @@ func (h *DespachoHandler) registrarEnLedgerSiDisponible(idPedido, estado, respon
 	idEvento := uuid.New().String()
 	fecha := time.Now().Format(time.RFC3339)
 	_ = h.Ledger.RegistrarEnLedger(context.Background(), idEvento, idPedido, estado, fecha, responsable)
+}
+
+// GET /api/despacho - RF-20
+func (h *DespachoHandler) ListarOrdenes(w http.ResponseWriter, r *http.Request) {
+	ordenes, err := h.PedidoRepo.ListarParaDespacho(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo obtener la lista de ordenes"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ordenes)
 }
 
 type GenerarDespachoRequest struct {

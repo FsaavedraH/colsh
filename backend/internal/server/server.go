@@ -79,6 +79,7 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 	r.With(appmw.RequireRole("Empaque")).Post("/api/empaque", empaqueHandler.ConfirmarEmpaque)
 
 	// Despacho y entrega
+	r.With(appmw.RequireRole("Transportista")).Get("/api/despacho", despachoHandler.ListarOrdenes)
 	r.With(appmw.RequireRole("Transportista")).Post("/api/despacho", despachoHandler.GenerarDespacho)
 	r.With(appmw.RequireRole("Transportista")).Post("/api/entrega", despachoHandler.ConfirmarEntrega)
 
