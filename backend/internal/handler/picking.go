@@ -34,7 +34,17 @@ func (h *PickingHandler) ListarOrdenes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"No se pudo obtener la lista de ordenes"}`, http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ordenes)
+}
 
+// GET /api/picking/historial
+func (h *PickingHandler) ListarHistorial(w http.ResponseWriter, r *http.Request) {
+	ordenes, err := h.PedidoRepo.ListarHistorialPicking(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo obtener el historial"}`, http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ordenes)
 }
@@ -45,7 +55,7 @@ type EscanearUbicacionRequest struct {
 	UbicacionEscaneada string `json:"ubicacion_escaneada"`
 }
 
-// POST /api/picking/escanear-ubicacion - RF-11, RF-28 (registro de intentos)
+// POST /api/picking/escanear-ubicacion - RF-11
 func (h *PickingHandler) EscanearUbicacion(w http.ResponseWriter, r *http.Request) {
 	var req EscanearUbicacionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -100,7 +110,7 @@ type EscanearProductoRequest struct {
 	IDProductoEscaneado string `json:"id_producto_escaneado"`
 }
 
-// POST /api/picking/escanear-producto - RF-12, RF-13, RF-26, RF-28
+// POST /api/picking/escanear-producto - RF-12, RF-13, RF-26
 func (h *PickingHandler) EscanearProducto(w http.ResponseWriter, r *http.Request) {
 	var req EscanearProductoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

@@ -104,18 +104,17 @@ func (r *PedidoRepository) ObtenerProductosDelPedido(ctx context.Context, idPedi
 	return productos, nil
 }
 
-// RF-09, RF-10: lista pedidos en "En recoleccion"
-func (r *PedidoRepository) ListarParaPicking(ctx context.Context) ([]PedidoPickingResumen, error) {
+func (r *PedidoRepository) listarPorEstados(ctx context.Context, estados []string) ([]PedidoPickingResumen, error) {
 	rows, err := r.Pool.Query(ctx, `
 		SELECT p.id_pedido, p.fecha_creacion, p.estado, u.nombre,
 		       COALESCE(SUM(dp.cantidad), 0) as total_items
 		FROM pedido p
 		JOIN usuario u ON u.id_usuario = p.id_cliente
 		LEFT JOIN detalle_pedido dp ON dp.id_pedido = p.id_pedido
-		WHERE p.estado = 'En recoleccion'
+		WHERE p.estado = ANY($1)
 		GROUP BY p.id_pedido, p.fecha_creacion, p.estado, u.nombre
-		ORDER BY p.fecha_creacion ASC
-	`)
+		ORDER BY p.fecha_creacion DESC
+	`, estados)
 	if err != nil {
 		return nil, err
 	}
@@ -130,48 +129,50 @@ func (r *PedidoRepository) ListarParaPicking(ctx context.Context) ([]PedidoPicki
 		resultado = append(resultado, pr)
 	}
 	return resultado, nil
+}
+
+// RF-09, RF-10: lista pedidos en "En recoleccion"
+func (r *PedidoRepository) ListarParaPicking(ctx context.Context) ([]PedidoPickingResumen, error) {
+	return r.listarPorEstados(ctx, []string{"En recoleccion"})
+}
+
+// Historial de Picking: pedidos que ya pasaron por recoleccion
+func (r *PedidoRepository) ListarHistorialPicking(ctx context.Context) ([]PedidoPickingResumen, error) {
+	return r.listarPorEstados(ctx, []string{"En empaque", "En despacho", "Entregado"})
 }
 
 // RF-15: lista pedidos en "En empaque"
 func (r *PedidoRepository) ListarParaEmpaque(ctx context.Context) ([]PedidoPickingResumen, error) {
-	rows, err := r.Pool.Query(ctx, `
-		SELECT p.id_pedido, p.fecha_creacion, p.estado, u.nombre,
-		       COALESCE(SUM(dp.cantidad), 0) as total_items
-		FROM pedido p
-		JOIN usuario u ON u.id_usuario = p.id_cliente
-		LEFT JOIN detalle_pedido dp ON dp.id_pedido = p.id_pedido
-		WHERE p.estado = 'En empaque'
-		GROUP BY p.id_pedido, p.fecha_creacion, p.estado, u.nombre
-		ORDER BY p.fecha_creacion ASC
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+	return r.listarPorEstados(ctx, []string{"En empaque"})
+}
 
-	var resultado []PedidoPickingResumen
-	for rows.Next() {
-		var pr PedidoPickingResumen
-		if err := rows.Scan(&pr.IDPedido, &pr.FechaCreacion, &pr.Estado, &pr.NombreCliente, &pr.TotalItems); err != nil {
-			return nil, err
-		}
-		resultado = append(resultado, pr)
-	}
-	return resultado, nil
+// Historial de Empaque: pedidos que ya pasaron por empaque
+func (r *PedidoRepository) ListarHistorialEmpaque(ctx context.Context) ([]PedidoPickingResumen, error) {
+	return r.listarPorEstados(ctx, []string{"En despacho", "Entregado"})
 }
 
 // RF-20: lista pedidos en "En despacho"
 func (r *PedidoRepository) ListarParaDespacho(ctx context.Context) ([]PedidoPickingResumen, error) {
+	return r.listarPorEstados(ctx, []string{"En despacho"})
+}
+
+// Historial de Transportista: pedidos ya entregados
+func (r *PedidoRepository) ListarHistorialDespacho(ctx context.Context) ([]PedidoPickingResumen, error) {
+	return r.listarPorEstados(ctx, []string{"Entregado"})
+}
+
+// Mis pedidos: todos los pedidos de un cliente especifico, sin importar el estado
+func (r *PedidoRepository) ListarPorCliente(ctx context.Context, idCliente uuid.UUID) ([]PedidoPickingResumen, error) {
 	rows, err := r.Pool.Query(ctx, `
 		SELECT p.id_pedido, p.fecha_creacion, p.estado, u.nombre,
 		       COALESCE(SUM(dp.cantidad), 0) as total_items
 		FROM pedido p
 		JOIN usuario u ON u.id_usuario = p.id_cliente
 		LEFT JOIN detalle_pedido dp ON dp.id_pedido = p.id_pedido
-		WHERE p.estado = 'En despacho'
+		WHERE p.id_cliente = $1
 		GROUP BY p.id_pedido, p.fecha_creacion, p.estado, u.nombre
-		ORDER BY p.fecha_creacion ASC
-	`)
+		ORDER BY p.fecha_creacion DESC
+	`, idCliente)
 	if err != nil {
 		return nil, err
 	}

@@ -35,7 +35,6 @@ func (h *PedidoHandler) CrearPedido(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// RF-02: Validar datos obligatorios completos
 	if req.ClienteID == "" || req.DireccionEntrega == "" || len(req.Productos) == 0 {
 		http.Error(w, `{"error":"Faltan datos obligatorios: cliente_id, direccion_entrega o productos"}`, http.StatusBadRequest)
 		return
@@ -50,7 +49,7 @@ func (h *PedidoHandler) CrearPedido(w http.ResponseWriter, r *http.Request) {
 	pedido := domain.Pedido{
 		IDPedido:         uuid.New(),
 		FechaCreacion:    time.Now(),
-		Estado:           "Pendiente", // RF-03
+		Estado:           "Pendiente",
 		IDCliente:        clienteID,
 		DireccionEntrega: req.DireccionEntrega,
 	}
@@ -98,4 +97,23 @@ func (h *PedidoHandler) ConsultarPedido(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(pedido)
+}
+
+// GET /api/mis-pedidos?cliente_id=... - Mis pedidos (Cliente)
+func (h *PedidoHandler) ListarMisPedidos(w http.ResponseWriter, r *http.Request) {
+	clienteIDParam := r.URL.Query().Get("cliente_id")
+	clienteID, err := uuid.Parse(clienteIDParam)
+	if err != nil {
+		http.Error(w, `{"error":"cliente_id invalido o faltante"}`, http.StatusBadRequest)
+		return
+	}
+
+	pedidos, err := h.Repo.ListarPorCliente(r.Context(), clienteID)
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo obtener los pedidos"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(pedidos)
 }

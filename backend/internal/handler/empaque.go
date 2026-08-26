@@ -34,7 +34,17 @@ func (h *EmpaqueHandler) ListarOrdenes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"No se pudo obtener la lista de ordenes"}`, http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ordenes)
+}
 
+// GET /api/empaque/historial
+func (h *EmpaqueHandler) ListarHistorial(w http.ResponseWriter, r *http.Request) {
+	ordenes, err := h.PedidoRepo.ListarHistorialEmpaque(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo obtener el historial"}`, http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ordenes)
 }

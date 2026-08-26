@@ -34,7 +34,17 @@ func (h *DespachoHandler) ListarOrdenes(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, `{"error":"No se pudo obtener la lista de ordenes"}`, http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ordenes)
+}
 
+// GET /api/despacho/historial
+func (h *DespachoHandler) ListarHistorial(w http.ResponseWriter, r *http.Request) {
+	ordenes, err := h.PedidoRepo.ListarHistorialDespacho(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo obtener el historial"}`, http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ordenes)
 }

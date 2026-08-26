@@ -57,6 +57,7 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 	r.With(appmw.RequireRole("Cliente")).Post("/api/pedidos", pedidoHandler.CrearPedido)
 	r.With(appmw.RequireRole("Cliente", "Picking", "Empaque", "Transportista", "Administrador")).
 		Get("/api/pedidos/{id}", pedidoHandler.ConsultarPedido)
+	r.With(appmw.RequireRole("Cliente")).Get("/api/mis-pedidos", pedidoHandler.ListarMisPedidos)
 
 	// Catalogo
 	r.With(appmw.RequireRole("Cliente", "Picking", "Empaque", "Transportista", "Administrador")).
@@ -68,18 +69,21 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 
 	// Picking
 	r.With(appmw.RequireRole("Picking", "Administrador")).Get("/api/picking", pickingHandler.ListarOrdenes)
+	r.With(appmw.RequireRole("Picking", "Administrador")).Get("/api/picking/historial", pickingHandler.ListarHistorial)
 	r.With(appmw.RequireRole("Picking")).Post("/api/picking/escanear-ubicacion", pickingHandler.EscanearUbicacion)
 	r.With(appmw.RequireRole("Picking")).Post("/api/picking/escanear-producto", pickingHandler.EscanearProducto)
 	r.With(appmw.RequireRole("Picking")).Post("/api/recoleccion", pickingHandler.ConfirmarRecoleccion)
 
 	// Empaque
 	r.With(appmw.RequireRole("Empaque")).Get("/api/empaque", empaqueHandler.ListarOrdenes)
+	r.With(appmw.RequireRole("Empaque")).Get("/api/empaque/historial", empaqueHandler.ListarHistorial)
 	r.With(appmw.RequireRole("Empaque")).Post("/api/empaque/recepcion", empaqueHandler.RecepcionEmpaque)
 	r.With(appmw.RequireRole("Empaque")).Post("/api/empaque/escanear", empaqueHandler.EscanearValidacion)
 	r.With(appmw.RequireRole("Empaque")).Post("/api/empaque", empaqueHandler.ConfirmarEmpaque)
 
 	// Despacho y entrega
 	r.With(appmw.RequireRole("Transportista")).Get("/api/despacho", despachoHandler.ListarOrdenes)
+	r.With(appmw.RequireRole("Transportista")).Get("/api/despacho/historial", despachoHandler.ListarHistorial)
 	r.With(appmw.RequireRole("Transportista")).Post("/api/despacho", despachoHandler.GenerarDespacho)
 	r.With(appmw.RequireRole("Transportista")).Post("/api/entrega", despachoHandler.ConfirmarEntrega)
 
