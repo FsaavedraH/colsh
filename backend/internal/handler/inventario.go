@@ -57,7 +57,6 @@ func (h *InventarioHandler) ValidarInventario(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// RF-09: al confirmar disponibilidad, el pedido pasa a "En recoleccion"
 	if err := h.PedidoRepo.ActualizarEstado(r.Context(), idPedido, "En recoleccion"); err != nil {
 		http.Error(w, `{"error":"No se pudo actualizar el estado del pedido"}`, http.StatusInternalServerError)
 		return
@@ -100,4 +99,16 @@ func (h *InventarioHandler) ActualizarInventario(w http.ResponseWriter, r *http.
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"estado": "actualizado"})
+}
+
+// GET /api/productos - catalogo para clientes
+func (h *InventarioHandler) ListarCatalogo(w http.ResponseWriter, r *http.Request) {
+	productos, err := h.InventarioRepo.ListarCatalogo(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo obtener el catalogo"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(productos)
 }

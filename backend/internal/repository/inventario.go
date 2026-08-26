@@ -55,7 +55,6 @@ func (r *InventarioRepository) ActualizarStock(ctx context.Context, idProducto u
 	return err
 }
 
-// RF-11: obtiene la ubicacion esperada de un producto, para comparar contra el escaneo
 func (r *InventarioRepository) ObtenerUbicacion(ctx context.Context, idProducto uuid.UUID) (string, error) {
 	var ubicacion string
 	err := r.Pool.QueryRow(ctx,
@@ -65,4 +64,36 @@ func (r *InventarioRepository) ObtenerUbicacion(ctx context.Context, idProducto 
 		return "", err
 	}
 	return ubicacion, nil
+}
+
+type ProductoCatalogo struct {
+	IDProducto string `json:"id_producto"`
+	Nombre     string `json:"nombre"`
+	Stock      int    `json:"stock"`
+	Ubicacion  string `json:"ubicacion"`
+}
+
+// ListarCatalogo devuelve todos los productos con su stock disponible.
+func (r *InventarioRepository) ListarCatalogo(ctx context.Context) ([]ProductoCatalogo, error) {
+	rows, err := r.Pool.Query(ctx, `
+		SELECT p.id_producto, p.nombre, COALESCE(SUM(i.stock), 0) as stock, MAX(i.ubicacion) as ubicacion
+		FROM producto p
+		LEFT JOIN inventario i ON i.id_producto = p.id_producto
+		GROUP BY p.id_producto, p.nombre
+		ORDER BY p.nombre ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var resultado []ProductoCatalogo
+	for rows.Next() {
+		var pc ProductoCatalogo
+		if err := rows.Scan(&pc.IDProducto, &pc.Nombre, &pc.Stock, &pc.Ubicacion); err != nil {
+			return nil, err
+		}
+		resultado = append(resultado, pc)
+	}
+	return resultado, nil
 }
