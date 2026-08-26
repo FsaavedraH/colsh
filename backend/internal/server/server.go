@@ -53,7 +53,7 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 		MaxAge:           300,
 	}))
 
-	// Pedidos - Cliente crea, cualquiera con rol valido puede consultar
+	// Pedidos
 	r.With(appmw.RequireRole("Cliente")).Post("/api/pedidos", pedidoHandler.CrearPedido)
 	r.With(appmw.RequireRole("Cliente", "Picking", "Empaque", "Transportista", "Administrador")).
 		Get("/api/pedidos/{id}", pedidoHandler.ConsultarPedido)
@@ -69,6 +69,7 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 	r.With(appmw.RequireRole("Picking")).Post("/api/recoleccion", pickingHandler.ConfirmarRecoleccion)
 
 	// Empaque
+	r.With(appmw.RequireRole("Empaque")).Get("/api/empaque", empaqueHandler.ListarOrdenes)
 	r.With(appmw.RequireRole("Empaque")).Post("/api/empaque/recepcion", empaqueHandler.RecepcionEmpaque)
 	r.With(appmw.RequireRole("Empaque")).Post("/api/empaque/escanear", empaqueHandler.EscanearValidacion)
 	r.With(appmw.RequireRole("Empaque")).Post("/api/empaque", empaqueHandler.ConfirmarEmpaque)

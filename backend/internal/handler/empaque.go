@@ -27,6 +27,18 @@ func (h *EmpaqueHandler) registrarEnLedgerSiDisponible(idPedido, estado, respons
 	_ = h.Ledger.RegistrarEnLedger(context.Background(), idEvento, idPedido, estado, fecha, responsable)
 }
 
+// GET /api/empaque - RF-15
+func (h *EmpaqueHandler) ListarOrdenes(w http.ResponseWriter, r *http.Request) {
+	ordenes, err := h.PedidoRepo.ListarParaEmpaque(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo obtener la lista de ordenes"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ordenes)
+}
+
 type RecepcionEmpaqueRequest struct {
 	IDPedido string `json:"id_pedido"`
 }
@@ -65,7 +77,7 @@ type EscanearValidacionEmpaqueRequest struct {
 	IDProductoEscaneado string `json:"id_producto_escaneado"`
 }
 
-// POST /api/empaque/escanear - RF-17, RF-26, RF-28
+// POST /api/empaque/escanear - RF-17, RF-26
 func (h *EmpaqueHandler) EscanearValidacion(w http.ResponseWriter, r *http.Request) {
 	var req EscanearValidacionEmpaqueRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

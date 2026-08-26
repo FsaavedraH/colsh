@@ -104,7 +104,7 @@ func (r *PedidoRepository) ObtenerProductosDelPedido(ctx context.Context, idPedi
 	return productos, nil
 }
 
-// RF-09, RF-10: lista pedidos en "En recoleccion" ordenados FIFO (mas antiguo primero)
+// RF-09, RF-10: lista pedidos en "En recoleccion" ordenados FIFO
 func (r *PedidoRepository) ListarParaPicking(ctx context.Context) ([]PedidoPickingResumen, error) {
 	rows, err := r.Pool.Query(ctx, `
 		SELECT p.id_pedido, p.fecha_creacion, p.estado, u.nombre,
@@ -113,6 +113,34 @@ func (r *PedidoRepository) ListarParaPicking(ctx context.Context) ([]PedidoPicki
 		JOIN usuario u ON u.id_usuario = p.id_cliente
 		LEFT JOIN detalle_pedido dp ON dp.id_pedido = p.id_pedido
 		WHERE p.estado = 'En recoleccion'
+		GROUP BY p.id_pedido, p.fecha_creacion, p.estado, u.nombre
+		ORDER BY p.fecha_creacion ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var resultado []PedidoPickingResumen
+	for rows.Next() {
+		var pr PedidoPickingResumen
+		if err := rows.Scan(&pr.IDPedido, &pr.FechaCreacion, &pr.Estado, &pr.NombreCliente, &pr.TotalItems); err != nil {
+			return nil, err
+		}
+		resultado = append(resultado, pr)
+	}
+	return resultado, nil
+}
+
+// RF-15: lista pedidos en "En empaque"
+func (r *PedidoRepository) ListarParaEmpaque(ctx context.Context) ([]PedidoPickingResumen, error) {
+	rows, err := r.Pool.Query(ctx, `
+		SELECT p.id_pedido, p.fecha_creacion, p.estado, u.nombre,
+		       COALESCE(SUM(dp.cantidad), 0) as total_items
+		FROM pedido p
+		JOIN usuario u ON u.id_usuario = p.id_cliente
+		LEFT JOIN detalle_pedido dp ON dp.id_pedido = p.id_pedido
+		WHERE p.estado = 'En empaque'
 		GROUP BY p.id_pedido, p.fecha_creacion, p.estado, u.nombre
 		ORDER BY p.fecha_creacion ASC
 	`)
