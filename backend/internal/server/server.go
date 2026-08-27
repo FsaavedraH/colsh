@@ -23,6 +23,9 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 	reporteRepo := &repository.ReporteRepository{Pool: pool}
 	reporteHandler := &handler.ReporteHandler{ReporteRepo: reporteRepo}
 
+	usuarioRepo := &repository.UsuarioRepository{Pool: pool}
+	usuarioHandler := &handler.UsuarioHandler{UsuarioRepo: usuarioRepo}
+
 	pickingHandler := &handler.PickingHandler{
 		PedidoRepo:     pedidoRepo,
 		InventarioRepo: inventarioRepo,
@@ -63,6 +66,9 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 	r.With(appmw.RequireRole("Cliente", "Picking", "Empaque", "Transportista", "Administrador")).
 		Get("/api/productos", inventarioHandler.ListarCatalogo)
 
+	// Usuarios
+	r.With(appmw.RequireRole("Administrador")).Get("/api/usuarios", usuarioHandler.ListarUsuarios)
+
 	// Inventario
 	r.With(appmw.RequireRole("Picking", "Administrador")).Post("/api/inventario/validar", inventarioHandler.ValidarInventario)
 	r.With(appmw.RequireRole("Picking", "Administrador")).Post("/api/inventario/actualizar", inventarioHandler.ActualizarInventario)
@@ -95,6 +101,9 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 	r.With(appmw.RequireRole("Administrador")).Get("/api/reportes/pedidos", reporteHandler.ListarPedidos)
 	r.With(appmw.RequireRole("Administrador")).Get("/api/reportes/tiempos", reporteHandler.TiemposPorEtapa)
 	r.With(appmw.RequireRole("Administrador")).Get("/api/reportes/incidencias", reporteHandler.IndicadorIncidencias)
+	r.With(appmw.RequireRole("Administrador")).Get("/api/reportes/conteo-estados", reporteHandler.ConteoPorEstado)
+	r.With(appmw.RequireRole("Administrador")).Get("/api/reportes/productos-top", reporteHandler.ProductosMasVendidos)
+	r.With(appmw.RequireRole("Administrador")).Get("/api/reportes/pedidos-por-dia", reporteHandler.PedidosPorDia)
 
 	return r
 }

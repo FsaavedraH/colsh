@@ -11,7 +11,6 @@ type ReporteHandler struct {
 	ReporteRepo *repository.ReporteRepository
 }
 
-// GET /api/reportes/pedidos?estado=&fecha_desde=&fecha_hasta= - RF-28
 func (h *ReporteHandler) ListarPedidos(w http.ResponseWriter, r *http.Request) {
 	estado := r.URL.Query().Get("estado")
 	fechaDesde := r.URL.Query().Get("fecha_desde")
@@ -27,7 +26,6 @@ func (h *ReporteHandler) ListarPedidos(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(pedidos)
 }
 
-// GET /api/reportes/tiempos - RF-29
 func (h *ReporteHandler) TiemposPorEtapa(w http.ResponseWriter, r *http.Request) {
 	tiempos, err := h.ReporteRepo.TiemposPorEtapa(r.Context())
 	if err != nil {
@@ -39,7 +37,6 @@ func (h *ReporteHandler) TiemposPorEtapa(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(tiempos)
 }
 
-// GET /api/reportes/incidencias - indicador operativo (equivalente IIT generado por el sistema)
 func (h *ReporteHandler) IndicadorIncidencias(w http.ResponseWriter, r *http.Request) {
 	indicadores, err := h.ReporteRepo.IndicadorIncidenciasEscaneo(r.Context())
 	if err != nil {
@@ -49,4 +46,38 @@ func (h *ReporteHandler) IndicadorIncidencias(w http.ResponseWriter, r *http.Req
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(indicadores)
+}
+
+func (h *ReporteHandler) ConteoPorEstado(w http.ResponseWriter, r *http.Request) {
+	conteo, err := h.ReporteRepo.ConteoPedidosPorEstado(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo calcular el conteo por estado"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(conteo)
+}
+
+func (h *ReporteHandler) ProductosMasVendidos(w http.ResponseWriter, r *http.Request) {
+	productos, err := h.ReporteRepo.ProductosMasVendidos(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo calcular el ranking de productos"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(productos)
+}
+
+// GET /api/reportes/pedidos-por-dia
+func (h *ReporteHandler) PedidosPorDia(w http.ResponseWriter, r *http.Request) {
+	datos, err := h.ReporteRepo.PedidosPorDia(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo calcular la tendencia de pedidos"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(datos)
 }

@@ -28,7 +28,6 @@ type PedidoReporte struct {
 	NombreCliente string    `json:"nombre_cliente"`
 }
 
-// RF-28: listado de pedidos con filtros opcionales por estado y rango de fecha.
 func (r *ReporteRepository) ListarPedidosFiltrado(ctx context.Context, estado, fechaDesde, fechaHasta string) ([]PedidoReporte, error) {
 	query := `
 		SELECT p.id_pedido, p.fecha_creacion, p.estado, u.nombre
@@ -62,7 +61,6 @@ type TiempoPorEtapa struct {
 	CantidadPedidos   int     `json:"cantidad_pedidos"`
 }
 
-// RF-29: tiempo promedio (en minutos) entre cada transicion de estado, usando evento_trazabilidad.
 func (r *ReporteRepository) TiemposPorEtapa(ctx context.Context) ([]TiempoPorEtapa, error) {
 	query := `
 		WITH eventos_ordenados AS (
@@ -106,8 +104,6 @@ type IndicadorIncidencias struct {
 	TasaIncidencia      float64 `json:"tasa_incidencia_porcentaje"`
 }
 
-// Indicador operativo: tasa de escaneos incorrectos por etapa (equivalente generado
-// por el sistema al IIT del planteamiento del problema, seccion 1.2).
 func (r *ReporteRepository) IndicadorIncidenciasEscaneo(ctx context.Context) ([]IndicadorIncidencias, error) {
 	query := `
 		SELECT
@@ -133,6 +129,94 @@ func (r *ReporteRepository) IndicadorIncidenciasEscaneo(ctx context.Context) ([]
 			ind.TasaIncidencia = (float64(ind.IntentosIncorrectos) / float64(ind.TotalIntentos)) * 100
 		}
 		resultado = append(resultado, ind)
+	}
+	return resultado, nil
+}
+
+type ConteoPorEstado struct {
+	Estado   string `json:"estado"`
+	Cantidad int    `json:"cantidad"`
+}
+
+func (r *ReporteRepository) ConteoPedidosPorEstado(ctx context.Context) ([]ConteoPorEstado, error) {
+	rows, err := r.Pool.Query(ctx, `
+		SELECT estado, COUNT(*) as cantidad
+		FROM pedido
+		GROUP BY estado
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var resultado []ConteoPorEstado
+	for rows.Next() {
+		var c ConteoPorEstado
+		if err := rows.Scan(&c.Estado, &c.Cantidad); err != nil {
+			return nil, err
+		}
+		resultado = append(resultado, c)
+	}
+	return resultado, nil
+}
+
+type ProductoMasVendido struct {
+	NombreProducto  string `json:"nombre_producto"`
+	CantidadVendida int    `json:"cantidad_vendida"`
+	TotalPedidos    int    `json:"total_pedidos"`
+}
+
+func (r *ReporteRepository) ProductosMasVendidos(ctx context.Context) ([]ProductoMasVendido, error) {
+	rows, err := r.Pool.Query(ctx, `
+		SELECT p.nombre, SUM(dp.cantidad) as cantidad_vendida, COUNT(DISTINCT dp.id_pedido) as total_pedidos
+		FROM detalle_pedido dp
+		JOIN producto p ON p.id_producto = dp.id_producto
+		GROUP BY p.nombre
+		ORDER BY cantidad_vendida DESC
+		LIMIT 10
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var resultado []ProductoMasVendido
+	for rows.Next() {
+		var pm ProductoMasVendido
+		if err := rows.Scan(&pm.NombreProducto, &pm.CantidadVendida, &pm.TotalPedidos); err != nil {
+			return nil, err
+		}
+		resultado = append(resultado, pm)
+	}
+	return resultado, nil
+}
+
+type PedidosPorDia struct {
+	Fecha    string `json:"fecha"`
+	Cantidad int    `json:"cantidad"`
+}
+
+// PedidosPorDia devuelve el conteo de pedidos creados por dia, ultimos 14 dias.
+func (r *ReporteRepository) PedidosPorDia(ctx context.Context) ([]PedidosPorDia, error) {
+	rows, err := r.Pool.Query(ctx, `
+		SELECT TO_CHAR(fecha_creacion::date, 'YYYY-MM-DD') as fecha, COUNT(*) as cantidad
+		FROM pedido
+		WHERE fecha_creacion >= NOW() - INTERVAL '14 days'
+		GROUP BY fecha_creacion::date
+		ORDER BY fecha_creacion::date ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var resultado []PedidosPorDia
+	for rows.Next() {
+		var p PedidosPorDia
+		if err := rows.Scan(&p.Fecha, &p.Cantidad); err != nil {
+			return nil, err
+		}
+		resultado = append(resultado, p)
 	}
 	return resultado, nil
 }
