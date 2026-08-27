@@ -15,9 +15,9 @@ import (
 
 func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.Mux {
 	pedidoRepo := &repository.PedidoRepository{Pool: pool}
-	pedidoHandler := &handler.PedidoHandler{Repo: pedidoRepo}
-
 	inventarioRepo := &repository.InventarioRepository{Pool: pool}
+
+	pedidoHandler := &handler.PedidoHandler{Repo: pedidoRepo, InventarioRepo: inventarioRepo}
 	inventarioHandler := &handler.InventarioHandler{InventarioRepo: inventarioRepo, PedidoRepo: pedidoRepo}
 
 	reporteRepo := &repository.ReporteRepository{Pool: pool}

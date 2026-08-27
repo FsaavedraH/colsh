@@ -13,7 +13,8 @@ import (
 )
 
 type PedidoHandler struct {
-	Repo *repository.PedidoRepository
+	Repo           *repository.PedidoRepository
+	InventarioRepo *repository.InventarioRepository
 }
 
 type CrearPedidoRequest struct {
@@ -27,7 +28,7 @@ type ProductoPedido struct {
 	Cantidad   int    `json:"cantidad"`
 }
 
-// POST /api/pedidos - RF-01
+// POST /api/pedidos - RF-01, RF-02, RF-03, y ahora tambien dispara RF-05 automaticamente
 func (h *PedidoHandler) CrearPedido(w http.ResponseWriter, r *http.Request) {
 	var req CrearPedidoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -68,11 +69,27 @@ func (h *PedidoHandler) CrearPedido(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// RF-05, RF-08, RF-09: validar inventario automaticamente al crear el pedido,
+	// para que nazca ya en "En recoleccion" o "En espera por inventario" segun corresponda,
+	// sin depender de un paso manual intermedio.
+	estadoFinal := pedido.Estado
+	if h.InventarioRepo != nil {
+		disponible, _, errValidar := h.InventarioRepo.ValidarStock(r.Context(), productos)
+		if errValidar == nil {
+			if disponible {
+				estadoFinal = "En recoleccion"
+			} else {
+				estadoFinal = "En espera por inventario"
+			}
+			h.Repo.ActualizarEstado(r.Context(), pedido.IDPedido, estadoFinal)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{
 		"id_pedido": pedido.IDPedido.String(),
-		"estado":    pedido.Estado,
+		"estado":    estadoFinal,
 	})
 }
 
