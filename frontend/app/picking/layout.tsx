@@ -1,4 +1,5 @@
 import Sidebar from "@/components/layout/Sidebar";
+import RutaProtegida from "@/components/layout/RutaProtegida";
 
 const itemsPicking = [
   { label: "Órdenes de Picking", href: "/picking" },
@@ -7,9 +8,11 @@ const itemsPicking = [
 
 export default function PickingLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen">
-      <Sidebar items={itemsPicking} colorRol="#d97706" />
-      <main className="flex-1 p-6 bg-gray-50">{children}</main>
-    </div>
+    <RutaProtegida rolPermitido="Picking">
+      <div className="flex min-h-screen">
+        <Sidebar items={itemsPicking} colorRol="#d97706" />
+        <main className="flex-1 p-6 bg-gray-50">{children}</main>
+      </div>
+    </RutaProtegida>
   );
 }

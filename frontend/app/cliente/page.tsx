@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import Button from "@/components/ui/Button";
 
 interface Producto {
@@ -12,10 +13,11 @@ interface Producto {
   ubicacion: string;
 }
 
-const CLIENTE_ID_TEMPORAL = "fbada7ec-ee17-4f0a-80db-b5d469adb4d4";
+const CARRITO_PENDIENTE_KEY = "colsh_carrito_pendiente";
 
 export default function CatalogoPage() {
   const router = useRouter();
+  const { usuario } = useAuth();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [cantidades, setCantidades] = useState<Record<string, number>>({});
   const [direccion, setDireccion] = useState("Cra 50 #10-25");
@@ -25,7 +27,22 @@ export default function CatalogoPage() {
 
   useEffect(() => {
     cargarCatalogo();
+    restaurarCarritoPendiente();
   }, []);
+
+  function restaurarCarritoPendiente() {
+    const guardado = sessionStorage.getItem(CARRITO_PENDIENTE_KEY);
+    if (guardado) {
+      try {
+        const { cantidades: c, direccion: d } = JSON.parse(guardado);
+        setCantidades(c || {});
+        setDireccion(d || "Cra 50 #10-25");
+      } catch {
+        // si el JSON guardado esta corrupto, simplemente lo ignoramos
+      }
+      sessionStorage.removeItem(CARRITO_PENDIENTE_KEY);
+    }
+  }
 
   async function cargarCatalogo() {
     setCargando(true);
@@ -52,6 +69,16 @@ export default function CatalogoPage() {
 
   async function crearPedido() {
     if (productosSeleccionados.length === 0) return;
+
+    if (!usuario) {
+      sessionStorage.setItem(
+        CARRITO_PENDIENTE_KEY,
+        JSON.stringify({ cantidades, direccion })
+      );
+      router.push("/login");
+      return;
+    }
+
     setEnviando(true);
     setError("");
 
@@ -60,7 +87,7 @@ export default function CatalogoPage() {
         method: "POST",
         rol: "Cliente",
         body: JSON.stringify({
-          cliente_id: CLIENTE_ID_TEMPORAL,
+          cliente_id: usuario.id_usuario,
           direccion_entrega: direccion,
           productos: productosSeleccionados.map(([id_producto, cantidad]) => ({
             id_producto,
@@ -121,8 +148,18 @@ export default function CatalogoPage() {
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4"
           />
 
+          {!usuario && (
+            <p className="text-xs text-amber-600 mb-3">
+              Necesitas iniciar sesión para confirmar tu pedido.
+            </p>
+          )}
+
           <Button onClick={crearPedido} disabled={enviando}>
-            {enviando ? "Creando pedido..." : "Confirmar pedido"}
+            {enviando
+              ? "Creando pedido..."
+              : usuario
+              ? "Confirmar pedido"
+              : "Iniciar sesión para continuar"}
           </Button>
         </div>
       )}

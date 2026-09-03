@@ -25,6 +25,7 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 
 	usuarioRepo := &repository.UsuarioRepository{Pool: pool}
 	usuarioHandler := &handler.UsuarioHandler{UsuarioRepo: usuarioRepo}
+	authHandler := &handler.AuthHandler{UsuarioRepo: usuarioRepo}
 
 	pickingHandler := &handler.PickingHandler{
 		PedidoRepo:     pedidoRepo,
@@ -56,6 +57,10 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 		MaxAge:           300,
 	}))
 
+	// Autenticacion - rutas publicas, sin RBAC (son el paso previo a tener un rol)
+	r.Post("/api/auth/login", authHandler.Login)
+	r.Post("/api/auth/registro", authHandler.Registro)
+
 	// Pedidos
 	r.With(appmw.RequireRole("Cliente")).Post("/api/pedidos", pedidoHandler.CrearPedido)
 	r.With(appmw.RequireRole("Cliente", "Picking", "Empaque", "Transportista", "Administrador")).
@@ -68,6 +73,7 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 
 	// Usuarios
 	r.With(appmw.RequireRole("Administrador")).Get("/api/usuarios", usuarioHandler.ListarUsuarios)
+	r.With(appmw.RequireRole("Administrador")).Post("/api/usuarios", usuarioHandler.CrearUsuarioAdmin)
 
 	// Inventario
 	r.With(appmw.RequireRole("Picking", "Administrador")).Post("/api/inventario/validar", inventarioHandler.ValidarInventario)

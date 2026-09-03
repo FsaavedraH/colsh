@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import Badge from "@/components/ui/Badge";
+import RutaProtegida from "@/components/layout/RutaProtegida";
 
 interface Pedido {
   id_pedido: string;
@@ -13,19 +15,19 @@ interface Pedido {
   total_items: number;
 }
 
-const CLIENTE_ID_TEMPORAL = "fbada7ec-ee17-4f0a-80db-b5d469adb4d4";
-
-export default function MisPedidosPage() {
+function ListaMisPedidos() {
+  const { usuario } = useAuth();
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    apiFetch<Pedido[]>(`/api/mis-pedidos?cliente_id=${CLIENTE_ID_TEMPORAL}`, { rol: "Cliente" })
+    if (!usuario) return;
+    apiFetch<Pedido[]>(`/api/mis-pedidos?cliente_id=${usuario.id_usuario}`, { rol: "Cliente" })
       .then((data) => setPedidos(data || []))
       .catch((err) => setError(err.message))
       .finally(() => setCargando(false));
-  }, []);
+  }, [usuario]);
 
   function formatearFecha(fecha: string) {
     return new Date(fecha).toLocaleString("es-CO", {
@@ -65,5 +67,13 @@ export default function MisPedidosPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+export default function MisPedidosPage() {
+  return (
+    <RutaProtegida rolPermitido="Cliente">
+      <ListaMisPedidos />
+    </RutaProtegida>
   );
 }
