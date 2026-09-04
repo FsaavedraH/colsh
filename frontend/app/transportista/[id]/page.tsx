@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 
@@ -14,11 +15,10 @@ interface Pedido {
   direccion_entrega: string;
 }
 
-const TRANSPORTISTA_ID_TEMPORAL = "939baa61-34d4-42f2-8b53-6c7fe668db31";
-
 export default function DetalleDespachoPage() {
   const params = useParams();
   const router = useRouter();
+  const { usuario } = useAuth();
   const idPedido = params.id as string;
 
   const [pedido, setPedido] = useState<Pedido | null>(null);
@@ -46,6 +46,10 @@ export default function DetalleDespachoPage() {
   }
 
   async function generarDespacho() {
+    if (!usuario) {
+      setError("No se pudo identificar al usuario. Inicia sesión de nuevo.");
+      return;
+    }
     setEnviando(true);
     setError("");
     try {
@@ -54,7 +58,7 @@ export default function DetalleDespachoPage() {
         rol: "Transportista",
         body: JSON.stringify({
           id_pedido: idPedido,
-          transportista: TRANSPORTISTA_ID_TEMPORAL,
+          transportista: usuario.id_usuario,
         }),
       });
       setCodigoSeguimiento(data.codigo_seguimiento);
@@ -66,6 +70,10 @@ export default function DetalleDespachoPage() {
   }
 
   async function confirmarEntrega() {
+    if (!usuario) {
+      setError("No se pudo identificar al usuario. Inicia sesión de nuevo.");
+      return;
+    }
     setEnviando(true);
     setError("");
     try {
@@ -74,7 +82,7 @@ export default function DetalleDespachoPage() {
         rol: "Transportista",
         body: JSON.stringify({
           id_pedido: idPedido,
-          transportista: TRANSPORTISTA_ID_TEMPORAL,
+          transportista: usuario.id_usuario,
         }),
       });
       setEntregado(true);

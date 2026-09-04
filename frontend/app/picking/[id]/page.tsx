@@ -22,6 +22,7 @@ export default function DetalleOrdenPage() {
   const [pedido, setPedido] = useState<Pedido | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
+  const [iniciando, setIniciando] = useState(false);
 
   useEffect(() => {
     cargarPedido();
@@ -37,6 +38,25 @@ export default function DetalleOrdenPage() {
       setError(err.message);
     } finally {
       setCargando(false);
+    }
+  }
+
+  async function iniciarPicking() {
+    setIniciando(true);
+    setError("");
+    try {
+      // Si el pedido esta "Pendiente", esta llamada lo pasa a "En recoleccion".
+      // Si ya estaba "En recoleccion" (se reabrio la orden), simplemente lo confirma de nuevo.
+      await apiFetch("/api/picking/iniciar", {
+        method: "POST",
+        rol: "Picking",
+        body: JSON.stringify({ id_pedido: idPedido }),
+      });
+      router.push(`/picking/${idPedido}/escanear-ubicacion`);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIniciando(false);
     }
   }
 
@@ -71,8 +91,8 @@ export default function DetalleOrdenPage() {
         </p>
       </div>
 
-      <Button onClick={() => router.push(`/picking/${idPedido}/escanear-ubicacion`)}>
-        Iniciar picking →
+      <Button onClick={iniciarPicking} disabled={iniciando}>
+        {iniciando ? "Iniciando..." : "Iniciar picking →"}
       </Button>
     </div>
   );

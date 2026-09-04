@@ -27,6 +27,35 @@ func (h *PickingHandler) registrarEnLedgerSiDisponible(idPedido, estado, respons
 	_ = h.Ledger.RegistrarEnLedger(context.Background(), idEvento, idPedido, estado, fecha, responsable)
 }
 
+type IniciarPickingRequest struct {
+	IDPedido string `json:"id_pedido"`
+}
+
+// POST /api/picking/iniciar - RF-09, RF-10. El operario "toma" el pedido de la cola
+// y lo pasa de "Pendiente" a "En recoleccion".
+func (h *PickingHandler) IniciarPicking(w http.ResponseWriter, r *http.Request) {
+	var req IniciarPickingRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"JSON invalido"}`, http.StatusBadRequest)
+		return
+	}
+
+	idPedido, err := uuid.Parse(req.IDPedido)
+	if err != nil {
+		http.Error(w, `{"error":"id_pedido invalido"}`, http.StatusBadRequest)
+		return
+	}
+
+	err = h.PedidoRepo.ActualizarEstado(r.Context(), idPedido, "En recoleccion")
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo iniciar el picking del pedido"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"estado": "En recoleccion"})
+}
+
 // GET /api/picking - RF-09, RF-10
 func (h *PickingHandler) ListarOrdenes(w http.ResponseWriter, r *http.Request) {
 	ordenes, err := h.PedidoRepo.ListarParaPicking(r.Context())

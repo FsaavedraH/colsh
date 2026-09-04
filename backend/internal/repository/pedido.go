@@ -131,9 +131,9 @@ func (r *PedidoRepository) listarPorEstados(ctx context.Context, estados []strin
 	return resultado, nil
 }
 
-// RF-09, RF-10: lista pedidos en "En recoleccion"
+// RF-09, RF-10: lista pedidos "Pendiente" (por iniciar) y "En recoleccion" (ya en proceso)
 func (r *PedidoRepository) ListarParaPicking(ctx context.Context) ([]PedidoPickingResumen, error) {
-	return r.listarPorEstados(ctx, []string{"En recoleccion"})
+	return r.listarPorEstados(ctx, []string{"Pendiente", "En recoleccion"})
 }
 
 // Historial de Picking: pedidos que ya pasaron por recoleccion

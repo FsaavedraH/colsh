@@ -69,18 +69,15 @@ func (h *PedidoHandler) CrearPedido(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// RF-05, RF-08, RF-09: validar inventario automaticamente al crear el pedido,
-	// para que nazca ya en "En recoleccion" o "En espera por inventario" segun corresponda,
-	// sin depender de un paso manual intermedio.
+	// RF-05, RF-08: validar inventario automaticamente al crear el pedido, solo para
+	// saber si hay stock suficiente. El pedido nace en "Pendiente" y solo pasa a
+	// "En recoleccion" cuando un operario de Picking realmente lo inicia (RF-09, RF-10).
+	// Si no hay stock, se marca de una vez "En espera por inventario" para avisar temprano.
 	estadoFinal := pedido.Estado
 	if h.InventarioRepo != nil {
 		disponible, _, errValidar := h.InventarioRepo.ValidarStock(r.Context(), productos)
-		if errValidar == nil {
-			if disponible {
-				estadoFinal = "En recoleccion"
-			} else {
-				estadoFinal = "En espera por inventario"
-			}
+		if errValidar == nil && !disponible {
+			estadoFinal = "En espera por inventario"
 			h.Repo.ActualizarEstado(r.Context(), pedido.IDPedido, estadoFinal)
 		}
 	}

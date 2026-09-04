@@ -3,19 +3,25 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import Button from "@/components/ui/Button";
 
 export default function ConfirmarEmpaquePage() {
   const params = useParams();
   const router = useRouter();
+  const { usuario } = useAuth();
   const idPedido = params.id as string;
 
-  const [responsable, setResponsable] = useState("e83f286d-7f7c-4f6d-ae41-b3c9bf63df14");
   const [confirmado, setConfirmado] = useState(false);
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
 
   async function confirmarEmpaque() {
+    if (!usuario) {
+      setError("No se pudo identificar al usuario. Inicia sesión de nuevo.");
+      return;
+    }
+
     setEnviando(true);
     setError("");
 
@@ -25,7 +31,7 @@ export default function ConfirmarEmpaquePage() {
         rol: "Empaque",
         body: JSON.stringify({
           id_pedido: idPedido,
-          responsable: responsable,
+          responsable: usuario.id_usuario,
         }),
       });
       setConfirmado(true);
@@ -59,13 +65,8 @@ export default function ConfirmarEmpaquePage() {
       </p>
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-        <label className="text-sm text-gray-500 block mb-1">Responsable (temporal)</label>
-        <input
-          type="text"
-          value={responsable}
-          onChange={(e) => setResponsable(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"
-        />
+        <label className="text-sm text-gray-500 block mb-1">Responsable</label>
+        <p className="text-sm font-medium text-gray-700">{usuario?.nombre || "—"}</p>
       </div>
 
       {error && <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">{error}</div>}

@@ -82,6 +82,7 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 	// Picking
 	r.With(appmw.RequireRole("Picking", "Administrador")).Get("/api/picking", pickingHandler.ListarOrdenes)
 	r.With(appmw.RequireRole("Picking", "Administrador")).Get("/api/picking/historial", pickingHandler.ListarHistorial)
+	r.With(appmw.RequireRole("Picking")).Post("/api/picking/iniciar", pickingHandler.IniciarPicking)
 	r.With(appmw.RequireRole("Picking")).Post("/api/picking/escanear-ubicacion", pickingHandler.EscanearUbicacion)
 	r.With(appmw.RequireRole("Picking")).Post("/api/picking/escanear-producto", pickingHandler.EscanearProducto)
 	r.With(appmw.RequireRole("Picking")).Post("/api/recoleccion", pickingHandler.ConfirmarRecoleccion)

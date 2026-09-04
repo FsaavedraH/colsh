@@ -34,6 +34,13 @@ func (h *TrazabilidadHandler) ConsultarTrazabilidad(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Si el chaincode no encontro eventos para este pedido, devuelve un array vacio
+	// en vez de un cuerpo sin contenido (evita que el frontend falle al parsear JSON).
+	if len(resultado) == 0 {
+		w.Write([]byte("[]"))
+		return
+	}
+
 	// El chaincode ya devuelve JSON valido, lo pasamos directo
 	w.Write(resultado)
 }
