@@ -181,17 +181,12 @@ type ConfirmarRecoleccionRequest struct {
 	Responsable string `json:"responsable"`
 }
 
-// POST /api/recoleccion - RF-14, RF-15, RF-24
+// POST /api/recoleccion - RF-14, RF-15, RF-24. El stock ya fue reservado al crear
+// el pedido (ver PedidoHandler.CrearPedido), asi que aqui NO se vuelve a descontar.
 func (h *PickingHandler) ConfirmarRecoleccion(w http.ResponseWriter, r *http.Request) {
 	var req ConfirmarRecoleccionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"JSON invalido"}`, http.StatusBadRequest)
-		return
-	}
-
-	idProducto, err := uuid.Parse(req.IDProducto)
-	if err != nil {
-		http.Error(w, `{"error":"id_producto invalido"}`, http.StatusBadRequest)
 		return
 	}
 
@@ -200,17 +195,17 @@ func (h *PickingHandler) ConfirmarRecoleccion(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	err = h.InventarioRepo.ActualizarStock(r.Context(), idProducto, req.Cantidad)
+	idPedido, err := uuid.Parse(req.IDPedido)
 	if err != nil {
-		http.Error(w, `{"error":"No se pudo actualizar el inventario: `+err.Error()+`"}`, http.StatusInternalServerError)
+		http.Error(w, `{"error":"id_pedido invalido"}`, http.StatusBadRequest)
 		return
 	}
 
-	idPedido, err := uuid.Parse(req.IDPedido)
-	if err == nil {
-		h.PedidoRepo.ActualizarEstado(r.Context(), idPedido, "En empaque")
-		h.registrarEnLedgerSiDisponible(req.IDPedido, "En recoleccion", req.Responsable)
+	if err := h.PedidoRepo.ActualizarEstado(r.Context(), idPedido, "En empaque"); err != nil {
+		http.Error(w, `{"error":"No se pudo actualizar el estado del pedido"}`, http.StatusInternalServerError)
+		return
 	}
+	h.registrarEnLedgerSiDisponible(req.IDPedido, "En recoleccion", req.Responsable)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"estado": "recolectado"})

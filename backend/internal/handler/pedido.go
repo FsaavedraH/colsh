@@ -28,7 +28,9 @@ type ProductoPedido struct {
 	Cantidad   int    `json:"cantidad"`
 }
 
-// POST /api/pedidos - RF-01, RF-02, RF-03, y ahora tambien dispara RF-05 automaticamente
+// POST /api/pedidos - RF-01, RF-02, RF-03. Reserva (descuenta) el stock de inmediato
+// para evitar sobreventa entre pedidos concurrentes (RF-05). Si no alcanza, el pedido
+// queda "En espera por inventario" sin haber tocado el stock.
 func (h *PedidoHandler) CrearPedido(w http.ResponseWriter, r *http.Request) {
 	var req CrearPedidoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -63,23 +65,19 @@ func (h *PedidoHandler) CrearPedido(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	estadoFinal := pedido.Estado
+	if h.InventarioRepo != nil {
+		disponible, _, errReservar := h.InventarioRepo.ReservarStock(r.Context(), productos)
+		if errReservar == nil && !disponible {
+			estadoFinal = "En espera por inventario"
+			pedido.Estado = estadoFinal
+		}
+	}
+
 	err = h.Repo.Crear(r.Context(), &pedido, productos)
 	if err != nil {
 		http.Error(w, `{"error":"No se pudo crear el pedido: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
-	}
-
-	// RF-05, RF-08: validar inventario automaticamente al crear el pedido, solo para
-	// saber si hay stock suficiente. El pedido nace en "Pendiente" y solo pasa a
-	// "En recoleccion" cuando un operario de Picking realmente lo inicia (RF-09, RF-10).
-	// Si no hay stock, se marca de una vez "En espera por inventario" para avisar temprano.
-	estadoFinal := pedido.Estado
-	if h.InventarioRepo != nil {
-		disponible, _, errValidar := h.InventarioRepo.ValidarStock(r.Context(), productos)
-		if errValidar == nil && !disponible {
-			estadoFinal = "En espera por inventario"
-			h.Repo.ActualizarEstado(r.Context(), pedido.IDPedido, estadoFinal)
-		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -90,7 +88,16 @@ func (h *PedidoHandler) CrearPedido(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GET /api/pedidos/{id} - RF-04
+type PedidoConDetalle struct {
+	IDPedido         uuid.UUID                      `json:"id_pedido"`
+	FechaCreacion    time.Time                      `json:"fecha_creacion"`
+	Estado           string                         `json:"estado"`
+	IDCliente        uuid.UUID                      `json:"id_cliente"`
+	DireccionEntrega string                         `json:"direccion_entrega"`
+	Productos        []repository.ItemDetallePedido `json:"productos"`
+}
+
+// GET /api/pedidos/{id} - RF-04, incluye el detalle de productos del pedido
 func (h *PedidoHandler) ConsultarPedido(w http.ResponseWriter, r *http.Request) {
 	idParam := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idParam)
@@ -109,8 +116,22 @@ func (h *PedidoHandler) ConsultarPedido(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	items, err := h.Repo.ObtenerDetalleConNombres(r.Context(), id)
+	if err != nil {
+		items = []repository.ItemDetallePedido{}
+	}
+
+	respuesta := PedidoConDetalle{
+		IDPedido:         pedido.IDPedido,
+		FechaCreacion:    pedido.FechaCreacion,
+		Estado:           pedido.Estado,
+		IDCliente:        pedido.IDCliente,
+		DireccionEntrega: pedido.DireccionEntrega,
+		Productos:        items,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(pedido)
+	json.NewEncoder(w).Encode(respuesta)
 }
 
 // GET /api/mis-pedidos?cliente_id=... - Mis pedidos (Cliente)
@@ -130,4 +151,70 @@ func (h *PedidoHandler) ListarMisPedidos(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(pedidos)
+}
+
+type CancelarPedidoRequest struct {
+	ClienteID string `json:"cliente_id"`
+}
+
+var estadosCancelables = map[string]bool{
+	"Pendiente":                 true,
+	"En espera por inventario":  true,
+	"En recoleccion":            true,
+	"En empaque":                true,
+}
+
+// POST /api/pedidos/{id}/cancelar - Cliente (dueno del pedido) o Administrador.
+// Libera el stock reservado (si lo habia) y marca el pedido como "Cancelado".
+// No se puede cancelar una vez el pedido esta "En despacho" o mas adelante.
+func (h *PedidoHandler) CancelarPedido(w http.ResponseWriter, r *http.Request) {
+	idParam := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idParam)
+	if err != nil {
+		http.Error(w, `{"error":"id invalido"}`, http.StatusBadRequest)
+		return
+	}
+
+	var req CancelarPedidoRequest
+	json.NewDecoder(r.Body).Decode(&req) // el body es opcional (Admin puede omitirlo)
+
+	pedido, err := h.Repo.ConsultarPorID(r.Context(), id)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			http.Error(w, `{"error":"Pedido no encontrado"}`, http.StatusNotFound)
+			return
+		}
+		http.Error(w, `{"error":"Error al consultar pedido"}`, http.StatusInternalServerError)
+		return
+	}
+
+	rol := r.Header.Get("X-User-Role")
+	if rol == "Cliente" {
+		if req.ClienteID == "" || req.ClienteID != pedido.IDCliente.String() {
+			http.Error(w, `{"error":"No tienes permiso para cancelar este pedido"}`, http.StatusForbidden)
+			return
+		}
+	}
+
+	if !estadosCancelables[pedido.Estado] {
+		http.Error(w, `{"error":"El pedido ya no se puede cancelar en su estado actual: `+pedido.Estado+`"}`, http.StatusConflict)
+		return
+	}
+
+	// Si el pedido nunca llego a reservar stock (estaba en espera por inventario),
+	// no hay nada que liberar. En cualquier otro estado cancelable, si habia stock reservado.
+	if pedido.Estado != "En espera por inventario" && h.InventarioRepo != nil {
+		productos, errProd := h.Repo.ObtenerProductosDelPedido(r.Context(), id)
+		if errProd == nil {
+			h.InventarioRepo.LiberarStock(r.Context(), productos)
+		}
+	}
+
+	if err := h.Repo.ActualizarEstado(r.Context(), id, "Cancelado"); err != nil {
+		http.Error(w, `{"error":"No se pudo cancelar el pedido"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"estado": "Cancelado"})
 }

@@ -24,6 +24,7 @@ export default function CatalogoPage() {
   const [cargando, setCargando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
+  const [mostrarResumen, setMostrarResumen] = useState(false);
 
   useEffect(() => {
     cargarCatalogo();
@@ -37,6 +38,7 @@ export default function CatalogoPage() {
         const { cantidades: c, direccion: d } = JSON.parse(guardado);
         setCantidades(c || {});
         setDireccion(d || "Cra 50 #10-25");
+        setMostrarResumen(true);
       } catch {
         // si el JSON guardado esta corrupto, simplemente lo ignoramos
       }
@@ -104,7 +106,7 @@ export default function CatalogoPage() {
   }
 
   return (
-    <div>
+    <div className={totalItems > 0 ? "pb-28" : ""}>
       <h1 className="text-2xl font-bold mb-6">Catálogo de Repuestos</h1>
 
       {cargando && <p className="text-gray-500">Cargando catálogo...</p>}
@@ -136,31 +138,43 @@ export default function CatalogoPage() {
         ))}
       </div>
 
+      {/* Barra flotante del carrito, fija abajo mientras se navega el catalogo */}
       {totalItems > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 max-w-md">
-          <h2 className="font-semibold mb-3">Resumen del pedido ({totalItems} ítems)</h2>
-
-          <label className="text-sm text-gray-500 block mb-1">Dirección de entrega</label>
-          <input
-            type="text"
-            value={direccion}
-            onChange={(e) => setDireccion(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4"
-          />
-
-          {!usuario && (
-            <p className="text-xs text-amber-600 mb-3">
-              Necesitas iniciar sesión para confirmar tu pedido.
-            </p>
+        <div className="fixed bottom-0 left-0 right-0 md:left-56 bg-white border-t border-gray-200 shadow-lg z-40">
+          {mostrarResumen && (
+            <div className="border-b border-gray-100 p-4 max-w-md ml-auto mr-4">
+              <label className="text-sm text-gray-500 block mb-1">Dirección de entrega</label>
+              <input
+                type="text"
+                value={direccion}
+                onChange={(e) => setDireccion(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+              {!usuario && (
+                <p className="text-xs text-amber-600 mt-2">
+                  Necesitas iniciar sesión para confirmar tu pedido.
+                </p>
+              )}
+            </div>
           )}
 
-          <Button onClick={crearPedido} disabled={enviando}>
-            {enviando
-              ? "Creando pedido..."
-              : usuario
-              ? "Confirmar pedido"
-              : "Iniciar sesión para continuar"}
-          </Button>
+          <div className="flex items-center justify-between px-4 py-3 max-w-4xl mx-auto">
+            <button
+              onClick={() => setMostrarResumen((v) => !v)}
+              className="text-sm font-medium text-gray-700 hover:text-gray-900"
+            >
+              🛒 {totalItems} ítem{totalItems !== 1 ? "s" : ""} en tu pedido{" "}
+              <span className="text-gray-400">{mostrarResumen ? "▾" : "▸"}</span>
+            </button>
+
+            <Button onClick={crearPedido} disabled={enviando}>
+              {enviando
+                ? "Creando pedido..."
+                : usuario
+                ? "Confirmar pedido"
+                : "Iniciar sesión para continuar"}
+            </Button>
+          </div>
         </div>
       )}
     </div>

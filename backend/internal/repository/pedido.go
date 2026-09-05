@@ -26,6 +26,11 @@ type PedidoPickingResumen struct {
 	TotalItems    int       `json:"total_items"`
 }
 
+type ItemDetallePedido struct {
+	Nombre   string `json:"nombre"`
+	Cantidad int    `json:"cantidad"`
+}
+
 func (r *PedidoRepository) Crear(ctx context.Context, pedido *domain.Pedido, productos []ProductoPedidoInput) error {
 	tx, err := r.Pool.Begin(ctx)
 	if err != nil {
@@ -104,6 +109,32 @@ func (r *PedidoRepository) ObtenerProductosDelPedido(ctx context.Context, idPedi
 	return productos, nil
 }
 
+// ObtenerDetalleConNombres: igual que ObtenerProductosDelPedido pero con el nombre
+// del producto ya resuelto, para mostrar en pantalla de detalle del pedido.
+func (r *PedidoRepository) ObtenerDetalleConNombres(ctx context.Context, idPedido uuid.UUID) ([]ItemDetallePedido, error) {
+	rows, err := r.Pool.Query(ctx, `
+		SELECT p.nombre, dp.cantidad
+		FROM detalle_pedido dp
+		JOIN producto p ON p.id_producto = dp.id_producto
+		WHERE dp.id_pedido = $1
+		ORDER BY p.nombre
+	`, idPedido)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ItemDetallePedido
+	for rows.Next() {
+		var item ItemDetallePedido
+		if err := rows.Scan(&item.Nombre, &item.Cantidad); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
 func (r *PedidoRepository) listarPorEstados(ctx context.Context, estados []string) ([]PedidoPickingResumen, error) {
 	rows, err := r.Pool.Query(ctx, `
 		SELECT p.id_pedido, p.fecha_creacion, p.estado, u.nombre,
@@ -129,6 +160,11 @@ func (r *PedidoRepository) listarPorEstados(ctx context.Context, estados []strin
 		resultado = append(resultado, pr)
 	}
 	return resultado, nil
+}
+
+// ListarPorEstado: consulta generica por un unico estado (usada para reactivar pedidos en espera)
+func (r *PedidoRepository) ListarPorEstado(ctx context.Context, estado string) ([]PedidoPickingResumen, error) {
+	return r.listarPorEstados(ctx, []string{estado})
 }
 
 // RF-09, RF-10: lista pedidos "Pendiente" (por iniciar) y "En recoleccion" (ya en proceso)
