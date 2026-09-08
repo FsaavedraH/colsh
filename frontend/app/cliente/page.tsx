@@ -69,6 +69,11 @@ export default function CatalogoPage() {
   const productosSeleccionados = Object.entries(cantidades).filter(([, cant]) => cant > 0);
   const totalItems = productosSeleccionados.reduce((sum, [, cant]) => sum + cant, 0);
 
+  // Solo un usuario con rol Cliente puede confirmar pedidos. Si hay sesion activa
+  // pero con otro rol (ej. Admin navego al catalogo publico), no se le permite
+  // comprar suplantando a un cliente.
+  const esRolNoCliente = usuario !== null && usuario.rol !== "Cliente";
+
   async function crearPedido() {
     if (productosSeleccionados.length === 0) return;
 
@@ -78,6 +83,13 @@ export default function CatalogoPage() {
         JSON.stringify({ cantidades, direccion })
       );
       router.push("/login");
+      return;
+    }
+
+    if (esRolNoCliente) {
+      setError(
+        "Tu sesión actual no es de Cliente, así que no puedes confirmar pedidos con ella. Cierra sesión e inicia con una cuenta de Cliente."
+      );
       return;
     }
 
@@ -155,6 +167,12 @@ export default function CatalogoPage() {
                   Necesitas iniciar sesión para confirmar tu pedido.
                 </p>
               )}
+              {esRolNoCliente && (
+                <p className="text-xs text-red-600 mt-2">
+                  Tu sesión actual ({usuario?.rol}) no puede confirmar pedidos. Cierra sesión e
+                  inicia con una cuenta de Cliente.
+                </p>
+              )}
             </div>
           )}
 
@@ -167,12 +185,14 @@ export default function CatalogoPage() {
               <span className="text-gray-400">{mostrarResumen ? "▾" : "▸"}</span>
             </button>
 
-            <Button onClick={crearPedido} disabled={enviando}>
+            <Button onClick={crearPedido} disabled={enviando || esRolNoCliente}>
               {enviando
                 ? "Creando pedido..."
-                : usuario
-                ? "Confirmar pedido"
-                : "Iniciar sesión para continuar"}
+                : !usuario
+                ? "Iniciar sesión para continuar"
+                : esRolNoCliente
+                ? "No disponible con este rol"
+                : "Confirmar pedido"}
             </Button>
           </div>
         </div>

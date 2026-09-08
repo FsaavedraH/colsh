@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/FsaavedraH/colsh/backend/internal/handler"
 	"github.com/FsaavedraH/colsh/backend/internal/ledger"
@@ -17,8 +18,14 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 	pedidoRepo := &repository.PedidoRepository{Pool: pool}
 	inventarioRepo := &repository.InventarioRepository{Pool: pool}
 	progresoRepo := &repository.ProgresoItemRepository{Pool: pool}
+	colaLedgerRepo := &repository.ColaLedgerRepository{Pool: pool}
 
-	pedidoHandler := &handler.PedidoHandler{Repo: pedidoRepo, InventarioRepo: inventarioRepo}
+	pedidoHandler := &handler.PedidoHandler{
+		Repo:           pedidoRepo,
+		InventarioRepo: inventarioRepo,
+		ColaLedgerRepo: colaLedgerRepo,
+		Ledger:         ledgerAdapter,
+	}
 	inventarioHandler := &handler.InventarioHandler{InventarioRepo: inventarioRepo, PedidoRepo: pedidoRepo}
 
 	reporteRepo := &repository.ReporteRepository{Pool: pool}
@@ -33,22 +40,32 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 		InventarioRepo: inventarioRepo,
 		ReporteRepo:    reporteRepo,
 		ProgresoRepo:   progresoRepo,
+		ColaLedgerRepo: colaLedgerRepo,
 		Ledger:         ledgerAdapter,
 	}
 
 	empaqueRepo := &repository.EmpaqueRepository{Pool: pool}
 	empaqueHandler := &handler.EmpaqueHandler{
-		PedidoRepo:   pedidoRepo,
-		EmpaqueRepo:  empaqueRepo,
-		ReporteRepo:  reporteRepo,
-		ProgresoRepo: progresoRepo,
-		Ledger:       ledgerAdapter,
+		PedidoRepo:     pedidoRepo,
+		EmpaqueRepo:    empaqueRepo,
+		ReporteRepo:    reporteRepo,
+		ProgresoRepo:   progresoRepo,
+		ColaLedgerRepo: colaLedgerRepo,
+		Ledger:         ledgerAdapter,
 	}
 
 	despachoRepo := &repository.DespachoRepository{Pool: pool}
-	despachoHandler := &handler.DespachoHandler{PedidoRepo: pedidoRepo, DespachoRepo: despachoRepo, Ledger: ledgerAdapter}
+	despachoHandler := &handler.DespachoHandler{
+		PedidoRepo:     pedidoRepo,
+		DespachoRepo:   despachoRepo,
+		ColaLedgerRepo: colaLedgerRepo,
+		Ledger:         ledgerAdapter,
+	}
 
 	trazabilidadHandler := &handler.TrazabilidadHandler{Ledger: ledgerAdapter}
+	ledgerHandler := &handler.LedgerHandler{ColaLedgerRepo: colaLedgerRepo}
+
+	iniciarReintentoLedger(ledgerAdapter, colaLedgerRepo)
 
 	r := chi.NewRouter()
 
@@ -113,6 +130,7 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 	// Trazabilidad
 	r.With(appmw.RequireRole("Cliente", "Picking", "Empaque", "Transportista", "Administrador")).
 		Get("/api/trazabilidad/{id_pedido}", trazabilidadHandler.ConsultarTrazabilidad)
+	r.With(appmw.RequireRole("Administrador")).Get("/api/ledger/pendientes", ledgerHandler.ListarPendientes)
 
 	// Reportes
 	r.With(appmw.RequireRole("Administrador")).Get("/api/reportes/pedidos", reporteHandler.ListarPedidos)
@@ -123,6 +141,48 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 	r.With(appmw.RequireRole("Administrador")).Get("/api/reportes/pedidos-por-dia", reporteHandler.PedidosPorDia)
 
 	return r
+}
+
+// iniciarReintentoLedger lanza un proceso en segundo plano que revisa cada 30
+// segundos si hay eventos pendientes de sincronizar con el ledger (por ejemplo,
+// porque Hyperledger Fabric estaba caido en el momento del evento original), e
+// intenta reenviarlos SIN alterar la fecha real en que ocurrieron.
+func iniciarReintentoLedger(ledgerAdapter *ledger.LedgerAdapter, colaRepo *repository.ColaLedgerRepository) {
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			if ledgerAdapter == nil {
+				continue // sin conexion al ledger todavia; se reintentara en el siguiente ciclo
+			}
+
+			pendientes, err := colaRepo.ListarPendientes(context.Background())
+			if err != nil || len(pendientes) == 0 {
+				continue
+			}
+
+			log.Printf("[ledger] Reintentando sincronizar %d evento(s) pendiente(s)...\n", len(pendientes))
+
+			for _, evento := range pendientes {
+				fechaStr := evento.FechaEventoReal.Format(time.RFC3339)
+				err := ledgerAdapter.RegistrarEnLedger(
+					context.Background(),
+					evento.IDEventoOriginal,
+					evento.IDPedido.String(),
+					evento.Estado,
+					fechaStr,
+					evento.Responsable,
+				)
+				if err != nil {
+					colaRepo.RegistrarIntentoFallido(context.Background(), evento.ID)
+					continue
+				}
+				colaRepo.EliminarPendiente(context.Background(), evento.ID)
+				log.Printf("[ledger] Sincronizado: pedido %s, estado '%s' (ocurrido %s)\n", evento.IDPedido, evento.Estado, fechaStr)
+			}
+		}
+	}()
 }
 
 func ConectarLedger() *ledger.LedgerAdapter {

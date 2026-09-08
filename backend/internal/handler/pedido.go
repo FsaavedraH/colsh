@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/FsaavedraH/colsh/backend/internal/domain"
+	"github.com/FsaavedraH/colsh/backend/internal/ledger"
 	"github.com/FsaavedraH/colsh/backend/internal/repository"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -15,6 +16,8 @@ import (
 type PedidoHandler struct {
 	Repo           *repository.PedidoRepository
 	InventarioRepo *repository.InventarioRepository
+	ColaLedgerRepo *repository.ColaLedgerRepository
+	Ledger         *ledger.LedgerAdapter
 }
 
 type CrearPedidoRequest struct {
@@ -30,7 +33,8 @@ type ProductoPedido struct {
 
 // POST /api/pedidos - RF-01, RF-02, RF-03. Reserva (descuenta) el stock de inmediato
 // para evitar sobreventa entre pedidos concurrentes (RF-05). Si no alcanza, el pedido
-// queda "En espera por inventario" sin haber tocado el stock.
+// queda "En espera por inventario" sin haber tocado el stock. El primer evento del
+// ledger para este pedido se registra aqui mismo, desde el Cliente.
 func (h *PedidoHandler) CrearPedido(w http.ResponseWriter, r *http.Request) {
 	var req CrearPedidoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -79,6 +83,10 @@ func (h *PedidoHandler) CrearPedido(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"No se pudo crear el pedido: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
+
+	// RF-24: primer evento del pedido en el ledger, registrado desde su creacion
+	// por el Cliente (no solo desde que Picking lo toca).
+	registrarEnLedgerOEncolar(r.Context(), h.Ledger, h.ColaLedgerRepo, pedido.IDPedido, estadoFinal, req.ClienteID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -158,10 +166,10 @@ type CancelarPedidoRequest struct {
 }
 
 var estadosCancelables = map[string]bool{
-	"Pendiente":                 true,
-	"En espera por inventario":  true,
-	"En recoleccion":            true,
-	"En empaque":                true,
+	"Pendiente":                true,
+	"En espera por inventario": true,
+	"En recoleccion":           true,
+	"En empaque":               true,
 }
 
 // POST /api/pedidos/{id}/cancelar - Cliente (dueno del pedido) o Administrador.
@@ -201,8 +209,6 @@ func (h *PedidoHandler) CancelarPedido(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Si el pedido nunca llego a reservar stock (estaba en espera por inventario),
-	// no hay nada que liberar. En cualquier otro estado cancelable, si habia stock reservado.
 	if pedido.Estado != "En espera por inventario" && h.InventarioRepo != nil {
 		productos, errProd := h.Repo.ObtenerProductosDelPedido(r.Context(), id)
 		if errProd == nil {
@@ -214,6 +220,12 @@ func (h *PedidoHandler) CancelarPedido(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"No se pudo cancelar el pedido"}`, http.StatusInternalServerError)
 		return
 	}
+
+	responsable := pedido.IDCliente.String()
+	if rol == "Administrador" {
+		responsable = "Administrador"
+	}
+	registrarEnLedgerOEncolar(r.Context(), h.Ledger, h.ColaLedgerRepo, id, "Cancelado", responsable)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"estado": "Cancelado"})

@@ -1,10 +1,8 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/FsaavedraH/colsh/backend/internal/ledger"
 	"github.com/FsaavedraH/colsh/backend/internal/repository"
@@ -18,16 +16,8 @@ type PickingHandler struct {
 	InventarioRepo *repository.InventarioRepository
 	ReporteRepo    *repository.ReporteRepository
 	ProgresoRepo   *repository.ProgresoItemRepository
+	ColaLedgerRepo *repository.ColaLedgerRepository
 	Ledger         *ledger.LedgerAdapter
-}
-
-func (h *PickingHandler) registrarEnLedgerSiDisponible(idPedido, estado, responsable string) {
-	if h.Ledger == nil {
-		return
-	}
-	idEvento := uuid.New().String()
-	fecha := time.Now().Format(time.RFC3339)
-	_ = h.Ledger.RegistrarEnLedger(context.Background(), idEvento, idPedido, estado, fecha, responsable)
 }
 
 type IniciarPickingRequest struct {
@@ -324,7 +314,7 @@ func (h *PickingHandler) ConfirmarRecoleccion(w http.ResponseWriter, r *http.Req
 		http.Error(w, `{"error":"No se pudo actualizar el estado del pedido"}`, http.StatusInternalServerError)
 		return
 	}
-	h.registrarEnLedgerSiDisponible(req.IDPedido, "En recoleccion", req.Responsable)
+	registrarEnLedgerOEncolar(r.Context(), h.Ledger, h.ColaLedgerRepo, idPedido, "En recoleccion", req.Responsable)
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"estado":   "En empaque",

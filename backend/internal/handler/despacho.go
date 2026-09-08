@@ -1,11 +1,9 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/FsaavedraH/colsh/backend/internal/ledger"
 	"github.com/FsaavedraH/colsh/backend/internal/repository"
@@ -13,18 +11,10 @@ import (
 )
 
 type DespachoHandler struct {
-	PedidoRepo   *repository.PedidoRepository
-	DespachoRepo *repository.DespachoRepository
-	Ledger       *ledger.LedgerAdapter
-}
-
-func (h *DespachoHandler) registrarEnLedgerSiDisponible(idPedido, estado, responsable string) {
-	if h.Ledger == nil {
-		return
-	}
-	idEvento := uuid.New().String()
-	fecha := time.Now().Format(time.RFC3339)
-	_ = h.Ledger.RegistrarEnLedger(context.Background(), idEvento, idPedido, estado, fecha, responsable)
+	PedidoRepo     *repository.PedidoRepository
+	DespachoRepo   *repository.DespachoRepository
+	ColaLedgerRepo *repository.ColaLedgerRepository
+	Ledger         *ledger.LedgerAdapter
 }
 
 // GET /api/despacho - RF-20
@@ -92,7 +82,7 @@ func (h *DespachoHandler) GenerarDespacho(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	h.registrarEnLedgerSiDisponible(req.IDPedido, "En despacho", req.Transportista)
+	registrarEnLedgerOEncolar(r.Context(), h.Ledger, h.ColaLedgerRepo, idPedido, "En despacho", req.Transportista)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -138,7 +128,7 @@ func (h *DespachoHandler) ConfirmarEntrega(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	h.registrarEnLedgerSiDisponible(req.IDPedido, "Entregado", req.Transportista)
+	registrarEnLedgerOEncolar(r.Context(), h.Ledger, h.ColaLedgerRepo, idPedido, "Entregado", req.Transportista)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"estado": "entregado"})

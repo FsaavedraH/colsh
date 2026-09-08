@@ -1,10 +1,8 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/FsaavedraH/colsh/backend/internal/ledger"
 	"github.com/FsaavedraH/colsh/backend/internal/repository"
@@ -14,20 +12,12 @@ import (
 )
 
 type EmpaqueHandler struct {
-	PedidoRepo   *repository.PedidoRepository
-	EmpaqueRepo  *repository.EmpaqueRepository
-	ReporteRepo  *repository.ReporteRepository
-	ProgresoRepo *repository.ProgresoItemRepository
-	Ledger       *ledger.LedgerAdapter
-}
-
-func (h *EmpaqueHandler) registrarEnLedgerSiDisponible(idPedido, estado, responsable string) {
-	if h.Ledger == nil {
-		return
-	}
-	idEvento := uuid.New().String()
-	fecha := time.Now().Format(time.RFC3339)
-	_ = h.Ledger.RegistrarEnLedger(context.Background(), idEvento, idPedido, estado, fecha, responsable)
+	PedidoRepo     *repository.PedidoRepository
+	EmpaqueRepo    *repository.EmpaqueRepository
+	ReporteRepo    *repository.ReporteRepository
+	ProgresoRepo   *repository.ProgresoItemRepository
+	ColaLedgerRepo *repository.ColaLedgerRepository
+	Ledger         *ledger.LedgerAdapter
 }
 
 // GET /api/empaque - RF-15
@@ -253,7 +243,7 @@ func (h *EmpaqueHandler) ConfirmarEmpaque(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	h.registrarEnLedgerSiDisponible(req.IDPedido, "En empaque", req.Responsable)
+	registrarEnLedgerOEncolar(r.Context(), h.Ledger, h.ColaLedgerRepo, idPedido, "En empaque", req.Responsable)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"estado": "empacado"})

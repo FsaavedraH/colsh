@@ -5,6 +5,7 @@ const itemsAdmin = [
   { label: "Usuarios", href: "/admin" },
   { label: "Inventario", href: "/admin/inventario" },
   { label: "Códigos QR", href: "/admin/codigos-qr" },
+  { label: "Ledger", href: "/admin/ledger" },
   { label: "Reportes", href: "/admin/reportes" },
 ];
 
