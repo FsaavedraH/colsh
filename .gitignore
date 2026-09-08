@@ -1,0 +1,25 @@
+# Variables de entorno y secretos
+.env
+.env.local
+backend/.env
+frontend/.env.local
+
+# Dependencias
+node_modules/
+frontend/node_modules/
+
+# Build de Next.js
+frontend/.next/
+frontend/out/
+
+# Binarios de Go
+backend/*.exe
+backend/backend
+
+# Archivos temporales de pruebas con curl
+backend/body_*.json
+backend/*.json
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

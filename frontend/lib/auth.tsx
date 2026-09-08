@@ -26,12 +26,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    const guardado = localStorage.getItem("colsh_usuario");
-    if (guardado) {
-      setUsuario(JSON.parse(guardado));
-    }
+    cargarDesdeStorage();
     setCargando(false);
+
+    // Si el usuario inicia o cierra sesion en OTRA pestana del mismo navegador,
+    // esta pestana se entera de inmediato y actualiza el nombre/rol mostrado,
+    // en vez de quedarse con la sesion vieja que tenia al momento de abrirse.
+    function alCambiarStorage(evento: StorageEvent) {
+      if (evento.key === "colsh_usuario") {
+        cargarDesdeStorage();
+      }
+    }
+
+    window.addEventListener("storage", alCambiarStorage);
+    return () => window.removeEventListener("storage", alCambiarStorage);
   }, []);
+
+  function cargarDesdeStorage() {
+    const guardado = localStorage.getItem("colsh_usuario");
+    setUsuario(guardado ? JSON.parse(guardado) : null);
+  };
 
   async function login(email: string, password: string) {
     const data = await apiFetch<Usuario>("/api/auth/login", {

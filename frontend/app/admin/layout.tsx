@@ -4,6 +4,7 @@ import RutaProtegida from "@/components/layout/RutaProtegida";
 const itemsAdmin = [
   { label: "Usuarios", href: "/admin" },
   { label: "Inventario", href: "/admin/inventario" },
+  { label: "Códigos QR", href: "/admin/codigos-qr" },
   { label: "Reportes", href: "/admin/reportes" },
 ];
 

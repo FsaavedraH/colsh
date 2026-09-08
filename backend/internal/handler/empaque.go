@@ -8,6 +8,7 @@ import (
 
 	"github.com/FsaavedraH/colsh/backend/internal/ledger"
 	"github.com/FsaavedraH/colsh/backend/internal/repository"
+	"github.com/FsaavedraH/colsh/backend/internal/security"
 	"github.com/google/uuid"
 )
 
@@ -87,7 +88,8 @@ type EscanearValidacionEmpaqueRequest struct {
 	IDProductoEscaneado string `json:"id_producto_escaneado"`
 }
 
-// POST /api/empaque/escanear - RF-17, RF-26
+// POST /api/empaque/escanear - RF-17, RF-26. El producto escaneado llega como
+// token firmado (HMAC); se valida la firma antes de comparar contra el esperado.
 func (h *EmpaqueHandler) EscanearValidacion(w http.ResponseWriter, r *http.Request) {
 	var req EscanearValidacionEmpaqueRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -103,7 +105,18 @@ func (h *EmpaqueHandler) EscanearValidacion(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", "application/json")
 
-	if req.IDProductoEscaneado != req.IDProductoEsperado {
+	idProductoEscaneado, err := security.ValidarValorFirmado(req.IDProductoEscaneado)
+	if err != nil {
+		h.ReporteRepo.RegistrarIntentoEscaneo(r.Context(), idPedido, "producto", "qr_invalido", "empaque")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"coincide": false,
+			"mensaje":  "Codigo QR invalido o no reconocido por el sistema.",
+		})
+		return
+	}
+
+	if idProductoEscaneado != req.IDProductoEsperado {
 		h.ReporteRepo.RegistrarIntentoEscaneo(r.Context(), idPedido, "producto", "incorrecto", "empaque")
 
 		w.WriteHeader(http.StatusConflict)

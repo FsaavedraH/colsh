@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/FsaavedraH/colsh/backend/internal/repository"
+	"github.com/FsaavedraH/colsh/backend/internal/security"
 	"github.com/google/uuid"
 )
 
@@ -184,4 +185,37 @@ func (h *InventarioHandler) ListarCompras(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(compras)
+}
+
+type ProductoConToken struct {
+	Nombre         string `json:"nombre"`
+	Stock          int    `json:"stock"`
+	Ubicacion      string `json:"ubicacion"`
+	TokenProducto  string `json:"token_producto"`
+	TokenUbicacion string `json:"token_ubicacion"`
+}
+
+// GET /api/inventario/qr - Solo Administrador. Devuelve, por cada producto,
+// tokens firmados (HMAC) en vez del UUID/ubicacion en crudo, para generar
+// etiquetas QR que el sistema pueda verificar como autenticas al escanearlas.
+func (h *InventarioHandler) ListarParaCodigosQR(w http.ResponseWriter, r *http.Request) {
+	productos, err := h.InventarioRepo.ListarCatalogo(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo obtener el catalogo"}`, http.StatusInternalServerError)
+		return
+	}
+
+	var resultado []ProductoConToken
+	for _, p := range productos {
+		resultado = append(resultado, ProductoConToken{
+			Nombre:         p.Nombre,
+			Stock:          p.Stock,
+			Ubicacion:      p.Ubicacion,
+			TokenProducto:  security.FirmarValor(p.IDProducto),
+			TokenUbicacion: security.FirmarValor(p.Ubicacion),
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resultado)
 }

@@ -27,8 +27,10 @@ type PedidoPickingResumen struct {
 }
 
 type ItemDetallePedido struct {
-	Nombre   string `json:"nombre"`
-	Cantidad int    `json:"cantidad"`
+	IDProducto string `json:"id_producto"`
+	Nombre     string `json:"nombre"`
+	Cantidad   int    `json:"cantidad"`
+	Ubicacion  string `json:"ubicacion"`
 }
 
 func (r *PedidoRepository) Crear(ctx context.Context, pedido *domain.Pedido, productos []ProductoPedidoInput) error {
@@ -110,13 +112,16 @@ func (r *PedidoRepository) ObtenerProductosDelPedido(ctx context.Context, idPedi
 }
 
 // ObtenerDetalleConNombres: igual que ObtenerProductosDelPedido pero con el nombre
-// del producto ya resuelto, para mostrar en pantalla de detalle del pedido.
+// y la ubicacion del producto ya resueltos, para mostrar en pantalla de detalle
+// del pedido y para que Picking/Empaque sepan automaticamente que validar.
 func (r *PedidoRepository) ObtenerDetalleConNombres(ctx context.Context, idPedido uuid.UUID) ([]ItemDetallePedido, error) {
 	rows, err := r.Pool.Query(ctx, `
-		SELECT p.nombre, dp.cantidad
+		SELECT p.id_producto, p.nombre, dp.cantidad, COALESCE(MAX(i.ubicacion), '')
 		FROM detalle_pedido dp
 		JOIN producto p ON p.id_producto = dp.id_producto
+		LEFT JOIN inventario i ON i.id_producto = p.id_producto
 		WHERE dp.id_pedido = $1
+		GROUP BY p.id_producto, p.nombre, dp.cantidad
 		ORDER BY p.nombre
 	`, idPedido)
 	if err != nil {
@@ -127,7 +132,7 @@ func (r *PedidoRepository) ObtenerDetalleConNombres(ctx context.Context, idPedid
 	var items []ItemDetallePedido
 	for rows.Next() {
 		var item ItemDetallePedido
-		if err := rows.Scan(&item.Nombre, &item.Cantidad); err != nil {
+		if err := rows.Scan(&item.IDProducto, &item.Nombre, &item.Cantidad, &item.Ubicacion); err != nil {
 			return nil, err
 		}
 		items = append(items, item)

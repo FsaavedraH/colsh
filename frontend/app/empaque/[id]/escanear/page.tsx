@@ -1,21 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import ScanBox from "@/components/ui/ScanBox";
 import { apiFetch } from "@/lib/api";
+
+interface ItemPedido {
+  id_producto: string;
+  nombre: string;
+  cantidad: number;
+  ubicacion: string;
+}
+
+interface Pedido {
+  productos: ItemPedido[];
+}
 
 export default function EscanearEmpaquePage() {
   const params = useParams();
   const router = useRouter();
   const idPedido = params.id as string;
 
-  const [idProductoEsperado, setIdProductoEsperado] = useState("088b064e-fdb3-4032-b360-57174fcc60ee");
+  const [producto, setProducto] = useState<ItemPedido | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState("");
   const [resultado, setResultado] = useState<{ tipo: "ok" | "error"; mensaje: string } | null>(null);
   const [verificando, setVerificando] = useState(false);
 
+  useEffect(() => {
+    apiFetch<Pedido>(`/api/pedidos/${idPedido}`, { rol: "Empaque" })
+      .then((data) => {
+        setProducto(data.productos?.[0] || null);
+      })
+      .catch((err) => setErrorCarga(err.message))
+      .finally(() => setCargando(false));
+  }, [idPedido]);
+
   async function manejarEscaneo(idProductoEscaneado: string) {
-    if (verificando) return;
+    if (verificando || !producto) return;
     setVerificando(true);
     setResultado(null);
 
@@ -25,7 +47,7 @@ export default function EscanearEmpaquePage() {
         rol: "Empaque",
         body: JSON.stringify({
           id_pedido: idPedido,
-          id_producto_esperado: idProductoEsperado,
+          id_producto_esperado: producto.id_producto,
           id_producto_escaneado: idProductoEscaneado,
         }),
       });
@@ -41,6 +63,10 @@ export default function EscanearEmpaquePage() {
     }
   }
 
+  if (cargando) return <p className="text-gray-500">Cargando pedido...</p>;
+  if (errorCarga) return <p className="text-red-600">Error: {errorCarga}</p>;
+  if (!producto) return <p className="text-gray-500">Este pedido no tiene productos registrados.</p>;
+
   return (
     <div className="max-w-md">
       <h1 className="text-xl font-bold mb-1">Validar producto para empaque</h1>
@@ -48,17 +74,15 @@ export default function EscanearEmpaquePage() {
         Orden {idPedido.slice(0, 8).toUpperCase()}
       </p>
 
-      <div className="mb-4">
-        <label className="text-sm text-gray-500 block mb-1">
-          ID de producto esperado (temporal, para pruebas)
-        </label>
-        <input
-          type="text"
-          value={idProductoEsperado}
-          onChange={(e) => setIdProductoEsperado(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"
-        />
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+        <p className="text-xs text-blue-600 mb-1">Producto esperado</p>
+        <p className="font-semibold text-blue-900">{producto.nombre}</p>
+        <p className="text-sm text-blue-700">Cantidad: {producto.cantidad}</p>
       </div>
+
+      <p className="text-sm text-gray-500 mb-2">
+        Escanea el código QR pegado en la caja/empaque del producto.
+      </p>
 
       <ScanBox onScan={manejarEscaneo} />
 

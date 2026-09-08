@@ -81,6 +81,7 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 	r.With(appmw.RequireRole("Picking", "Administrador")).Post("/api/inventario/actualizar", inventarioHandler.ActualizarInventario)
 	r.With(appmw.RequireRole("Administrador")).Post("/api/inventario/compras", inventarioHandler.RegistrarCompra)
 	r.With(appmw.RequireRole("Administrador")).Get("/api/inventario/compras", inventarioHandler.ListarCompras)
+	r.With(appmw.RequireRole("Administrador")).Get("/api/inventario/qr", inventarioHandler.ListarParaCodigosQR)
 
 	// Picking
 	r.With(appmw.RequireRole("Picking", "Administrador")).Get("/api/picking", pickingHandler.ListarOrdenes)

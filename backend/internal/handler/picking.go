@@ -8,6 +8,7 @@ import (
 
 	"github.com/FsaavedraH/colsh/backend/internal/ledger"
 	"github.com/FsaavedraH/colsh/backend/internal/repository"
+	"github.com/FsaavedraH/colsh/backend/internal/security"
 	"github.com/google/uuid"
 )
 
@@ -84,7 +85,9 @@ type EscanearUbicacionRequest struct {
 	UbicacionEscaneada string `json:"ubicacion_escaneada"`
 }
 
-// POST /api/picking/escanear-ubicacion - RF-11
+// POST /api/picking/escanear-ubicacion - RF-11. La ubicacion escaneada llega como
+// un token firmado (HMAC); si la firma no es valida, se rechaza como QR falsificado
+// o ajeno al sistema, sin llegar siquiera a comparar contra la ubicacion esperada.
 func (h *PickingHandler) EscanearUbicacion(w http.ResponseWriter, r *http.Request) {
 	var req EscanearUbicacionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -104,22 +107,33 @@ func (h *PickingHandler) EscanearUbicacion(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+
+	ubicacionEscaneada, err := security.ValidarValorFirmado(req.UbicacionEscaneada)
+	if err != nil {
+		h.ReporteRepo.RegistrarIntentoEscaneo(r.Context(), idPedido, "ubicacion", "qr_invalido", "picking")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"coincide": false,
+			"mensaje":  "Codigo QR invalido o no reconocido por el sistema.",
+		})
+		return
+	}
+
 	ubicacionEsperada, err := h.InventarioRepo.ObtenerUbicacion(r.Context(), idProducto)
 	if err != nil {
 		http.Error(w, `{"error":"No se pudo obtener la ubicacion del producto"}`, http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-
-	if req.UbicacionEscaneada != ubicacionEsperada {
+	if ubicacionEscaneada != ubicacionEsperada {
 		h.ReporteRepo.RegistrarIntentoEscaneo(r.Context(), idPedido, "ubicacion", "incorrecto", "picking")
 
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"coincide":            false,
 			"ubicacion_esperada":  ubicacionEsperada,
-			"ubicacion_escaneada": req.UbicacionEscaneada,
+			"ubicacion_escaneada": ubicacionEscaneada,
 			"mensaje":             "Ubicacion incorrecta. La ubicacion escaneada no coincide. Intenta nuevamente.",
 		})
 		return
@@ -139,7 +153,8 @@ type EscanearProductoRequest struct {
 	IDProductoEscaneado string `json:"id_producto_escaneado"`
 }
 
-// POST /api/picking/escanear-producto - RF-12, RF-13, RF-26
+// POST /api/picking/escanear-producto - RF-12, RF-13, RF-26. El producto escaneado
+// llega como token firmado; se valida la firma antes de comparar contra el esperado.
 func (h *PickingHandler) EscanearProducto(w http.ResponseWriter, r *http.Request) {
 	var req EscanearProductoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -155,7 +170,18 @@ func (h *PickingHandler) EscanearProducto(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "application/json")
 
-	if req.IDProductoEscaneado != req.IDProductoEsperado {
+	idProductoEscaneado, err := security.ValidarValorFirmado(req.IDProductoEscaneado)
+	if err != nil {
+		h.ReporteRepo.RegistrarIntentoEscaneo(r.Context(), idPedido, "producto", "qr_invalido", "picking")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"coincide": false,
+			"mensaje":  "Codigo QR invalido o no reconocido por el sistema.",
+		})
+		return
+	}
+
+	if idProductoEscaneado != req.IDProductoEsperado {
 		h.ReporteRepo.RegistrarIntentoEscaneo(r.Context(), idPedido, "producto", "incorrecto", "picking")
 
 		w.WriteHeader(http.StatusConflict)

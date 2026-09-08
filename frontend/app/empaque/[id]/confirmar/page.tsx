@@ -1,10 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import Button from "@/components/ui/Button";
+
+interface ItemPedido {
+  id_producto: string;
+  nombre: string;
+  cantidad: number;
+}
+
+interface Pedido {
+  productos: ItemPedido[];
+}
 
 export default function ConfirmarEmpaquePage() {
   const params = useParams();
@@ -12,9 +22,19 @@ export default function ConfirmarEmpaquePage() {
   const { usuario } = useAuth();
   const idPedido = params.id as string;
 
+  const [producto, setProducto] = useState<ItemPedido | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState("");
   const [confirmado, setConfirmado] = useState(false);
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
+
+  useEffect(() => {
+    apiFetch<Pedido>(`/api/pedidos/${idPedido}`, { rol: "Empaque" })
+      .then((data) => setProducto(data.productos?.[0] || null))
+      .catch((err) => setErrorCarga(err.message))
+      .finally(() => setCargando(false));
+  }, [idPedido]);
 
   async function confirmarEmpaque() {
     if (!usuario) {
@@ -63,6 +83,17 @@ export default function ConfirmarEmpaquePage() {
       <p className="text-gray-500 text-sm mb-4">
         Orden {idPedido.slice(0, 8).toUpperCase()}
       </p>
+
+      {cargando && <p className="text-gray-500 mb-4">Cargando pedido...</p>}
+      {errorCarga && <p className="text-red-600 mb-4">Error: {errorCarga}</p>}
+
+      {producto && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <p className="text-xs text-blue-600 mb-1">Producto a empacar</p>
+          <p className="font-semibold text-blue-900">{producto.nombre}</p>
+          <p className="text-sm text-blue-700">Cantidad: {producto.cantidad}</p>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
         <label className="text-sm text-gray-500 block mb-1">Responsable</label>
