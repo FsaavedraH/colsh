@@ -13,8 +13,17 @@ interface ItemPedido {
   ubicacion: string;
 }
 
-interface Pedido {
-  productos: ItemPedido[];
+interface SiguienteItemResponse {
+  completo: boolean;
+  item?: ItemPedido;
+  procesados: number;
+  total_items: number;
+}
+
+interface ConfirmarRecoleccionResponse {
+  estado: string;
+  completo: boolean;
+  pendientes?: number;
 }
 
 export default function ConfirmarRecoleccionPage() {
@@ -23,29 +32,45 @@ export default function ConfirmarRecoleccionPage() {
   const { usuario } = useAuth();
   const idPedido = params.id as string;
 
-  const [producto, setProducto] = useState<ItemPedido | null>(null);
+  const [item, setItem] = useState<ItemPedido | null>(null);
+  const [progreso, setProgreso] = useState({ procesados: 0, total: 0 });
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState("");
   const [cantidadContada, setCantidadContada] = useState(0);
-  const [confirmado, setConfirmado] = useState(false);
+  const [pedidoCompleto, setPedidoCompleto] = useState(false);
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
-    apiFetch<Pedido>(`/api/pedidos/${idPedido}`, { rol: "Picking" })
-      .then((data) => {
-        const item = data.productos?.[0] || null;
-        setProducto(item);
-        if (item) setCantidadContada(item.cantidad);
-      })
-      .catch((err) => setErrorCarga(err.message))
-      .finally(() => setCargando(false));
+    cargarSiguienteItem();
   }, [idPedido]);
 
-  const noCoincide = producto ? cantidadContada !== producto.cantidad : false;
+  async function cargarSiguienteItem() {
+    setCargando(true);
+    try {
+      const data = await apiFetch<SiguienteItemResponse>(
+        `/api/picking/${idPedido}/siguiente-item`,
+        { rol: "Picking" }
+      );
+      if (data.completo || !data.item) {
+        setPedidoCompleto(true);
+        setItem(null);
+      } else {
+        setItem(data.item);
+        setCantidadContada(data.item.cantidad);
+        setProgreso({ procesados: data.procesados, total: data.total_items });
+      }
+    } catch (err: any) {
+      setErrorCarga(err.message);
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  const noCoincide = item ? cantidadContada !== item.cantidad : false;
 
   async function confirmarRecoleccion() {
-    if (!usuario || !producto) {
+    if (!usuario || !item) {
       setError("No se pudo identificar al usuario. Inicia sesión de nuevo.");
       return;
     }
@@ -54,17 +79,24 @@ export default function ConfirmarRecoleccionPage() {
     setError("");
 
     try {
-      await apiFetch("/api/recoleccion", {
+      const data = await apiFetch<ConfirmarRecoleccionResponse>("/api/recoleccion", {
         method: "POST",
         rol: "Picking",
         body: JSON.stringify({
           id_pedido: idPedido,
-          id_producto: producto.id_producto,
+          id_producto: item.id_producto,
           cantidad: cantidadContada,
           responsable: usuario.id_usuario,
         }),
       });
-      setConfirmado(true);
+
+      if (data.completo) {
+        setPedidoCompleto(true);
+        setItem(null);
+      } else {
+        // Quedan mas items: volvemos a escanear ubicacion para el siguiente producto
+        router.push(`/picking/${idPedido}/escanear-ubicacion`);
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -74,15 +106,14 @@ export default function ConfirmarRecoleccionPage() {
 
   if (cargando) return <p className="text-gray-500">Cargando pedido...</p>;
   if (errorCarga) return <p className="text-red-600">Error: {errorCarga}</p>;
-  if (!producto) return <p className="text-gray-500">Este pedido no tiene productos registrados.</p>;
 
-  if (confirmado) {
+  if (pedidoCompleto) {
     return (
       <div className="max-w-md">
         <div className="bg-green-100 text-green-700 rounded-xl p-6 text-center">
           <div className="text-3xl mb-2">✓</div>
-          <h1 className="text-lg font-bold mb-1">¡Ítem recolectado!</h1>
-          <p className="text-sm">La recolección fue registrada correctamente.</p>
+          <h1 className="text-lg font-bold mb-1">¡Pedido recolectado por completo!</h1>
+          <p className="text-sm">Todos los productos fueron recolectados. La orden pasó a empaque.</p>
         </div>
         <Button onClick={() => router.push("/picking")}>
           Volver a la lista de órdenes
@@ -91,9 +122,18 @@ export default function ConfirmarRecoleccionPage() {
     );
   }
 
+  if (!item) return <p className="text-gray-500">Este pedido no tiene productos pendientes.</p>;
+
   return (
     <div className="max-w-md">
-      <h1 className="text-xl font-bold mb-1">Confirmar recolección</h1>
+      <div className="flex justify-between items-center mb-1">
+        <h1 className="text-xl font-bold">Confirmar recolección</h1>
+        {progreso.total > 1 && (
+          <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+            Ítem {progreso.procesados + 1} de {progreso.total}
+          </span>
+        )}
+      </div>
       <p className="text-gray-500 text-sm mb-4">
         Orden {idPedido.slice(0, 8).toUpperCase()}
       </p>
@@ -101,12 +141,12 @@ export default function ConfirmarRecoleccionPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4 space-y-3">
         <div>
           <p className="text-sm text-gray-500">Producto</p>
-          <p className="font-semibold">{producto.nombre}</p>
+          <p className="font-semibold">{item.nombre}</p>
         </div>
 
         <div>
           <p className="text-sm text-gray-500">Cantidad solicitada en el pedido</p>
-          <p className="font-semibold">{producto.cantidad}</p>
+          <p className="font-semibold">{item.cantidad}</p>
         </div>
 
         <div>
@@ -130,7 +170,7 @@ export default function ConfirmarRecoleccionPage() {
 
       {noCoincide && (
         <div className="mb-4 p-3 bg-amber-100 text-amber-800 rounded-lg text-sm">
-          ⚠️ La cantidad contada ({cantidadContada}) no coincide con la solicitada ({producto.cantidad}).
+          ⚠️ La cantidad contada ({cantidadContada}) no coincide con la solicitada ({item.cantidad}).
           Verifica antes de confirmar; esto quedará registrado como incidencia de inventario.
         </div>
       )}
@@ -138,7 +178,11 @@ export default function ConfirmarRecoleccionPage() {
       {error && <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">{error}</div>}
 
       <Button onClick={confirmarRecoleccion} disabled={enviando}>
-        {enviando ? "Confirmando..." : "Confirmar recolección"}
+        {enviando
+          ? "Confirmando..."
+          : progreso.total > 1 && progreso.procesados + 1 < progreso.total
+          ? "Confirmar y continuar con el siguiente ítem"
+          : "Confirmar recolección"}
       </Button>
     </div>
   );

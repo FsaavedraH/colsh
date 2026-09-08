@@ -9,6 +9,7 @@ import (
 	"github.com/FsaavedraH/colsh/backend/internal/ledger"
 	"github.com/FsaavedraH/colsh/backend/internal/repository"
 	"github.com/FsaavedraH/colsh/backend/internal/security"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
@@ -16,6 +17,7 @@ type PickingHandler struct {
 	PedidoRepo     *repository.PedidoRepository
 	InventarioRepo *repository.InventarioRepository
 	ReporteRepo    *repository.ReporteRepository
+	ProgresoRepo   *repository.ProgresoItemRepository
 	Ledger         *ledger.LedgerAdapter
 }
 
@@ -77,6 +79,61 @@ func (h *PickingHandler) ListarHistorial(w http.ResponseWriter, r *http.Request)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ordenes)
+}
+
+type SiguienteItemResponse struct {
+	Completo   bool                          `json:"completo"`
+	Item       *repository.ItemDetallePedido `json:"item,omitempty"`
+	Procesados int                           `json:"procesados"`
+	TotalItems int                           `json:"total_items"`
+}
+
+// GET /api/picking/{id}/siguiente-item - RF-09, RF-10, RF-14. Devuelve el proximo
+// producto del pedido que aun no ha sido recolectado. Si "completo" es true, ya
+// no quedan items pendientes en Picking.
+func (h *PickingHandler) SiguienteItem(w http.ResponseWriter, r *http.Request) {
+	idParam := chi.URLParam(r, "id")
+	idPedido, err := uuid.Parse(idParam)
+	if err != nil {
+		http.Error(w, `{"error":"id invalido"}`, http.StatusBadRequest)
+		return
+	}
+
+	total, err := h.ProgresoRepo.TotalItems(r.Context(), idPedido)
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo consultar el pedido"}`, http.StatusInternalServerError)
+		return
+	}
+
+	pendientes, err := h.ProgresoRepo.ContarPendientes(r.Context(), idPedido, "picking")
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo consultar el progreso"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if pendientes == 0 {
+		json.NewEncoder(w).Encode(SiguienteItemResponse{
+			Completo:   true,
+			Procesados: total,
+			TotalItems: total,
+		})
+		return
+	}
+
+	item, err := h.ProgresoRepo.SiguienteItemPendiente(r.Context(), idPedido, "picking")
+	if err != nil || item == nil {
+		http.Error(w, `{"error":"No se pudo obtener el siguiente item"}`, http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(SiguienteItemResponse{
+		Completo:   false,
+		Item:       item,
+		Procesados: total - pendientes,
+		TotalItems: total,
+	})
 }
 
 type EscanearUbicacionRequest struct {
@@ -208,7 +265,9 @@ type ConfirmarRecoleccionRequest struct {
 }
 
 // POST /api/recoleccion - RF-14, RF-15, RF-24. El stock ya fue reservado al crear
-// el pedido (ver PedidoHandler.CrearPedido), asi que aqui NO se vuelve a descontar.
+// el pedido, asi que aqui NO se vuelve a descontar. Registra este item como
+// procesado; el pedido solo pasa a "En empaque" cuando TODOS sus items ya
+// fueron recolectados (soporta pedidos con varios productos distintos).
 func (h *PickingHandler) ConfirmarRecoleccion(w http.ResponseWriter, r *http.Request) {
 	var req ConfirmarRecoleccionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -227,12 +286,48 @@ func (h *PickingHandler) ConfirmarRecoleccion(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	idProducto, err := uuid.Parse(req.IDProducto)
+	if err != nil {
+		http.Error(w, `{"error":"id_producto invalido"}`, http.StatusBadRequest)
+		return
+	}
+
+	responsable, err := uuid.Parse(req.Responsable)
+	if err != nil {
+		http.Error(w, `{"error":"responsable invalido"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := h.ProgresoRepo.RegistrarProgreso(r.Context(), idPedido, idProducto, "picking", req.Cantidad, responsable); err != nil {
+		http.Error(w, `{"error":"No se pudo registrar la recoleccion: `+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	pendientes, err := h.ProgresoRepo.ContarPendientes(r.Context(), idPedido, "picking")
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo verificar el progreso del pedido"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if pendientes > 0 {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"estado":     "item_recolectado",
+			"completo":   false,
+			"pendientes": pendientes,
+		})
+		return
+	}
+
 	if err := h.PedidoRepo.ActualizarEstado(r.Context(), idPedido, "En empaque"); err != nil {
 		http.Error(w, `{"error":"No se pudo actualizar el estado del pedido"}`, http.StatusInternalServerError)
 		return
 	}
 	h.registrarEnLedgerSiDisponible(req.IDPedido, "En recoleccion", req.Responsable)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"estado": "recolectado"})
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"estado":   "En empaque",
+		"completo": true,
+	})
 }

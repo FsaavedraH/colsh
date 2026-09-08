@@ -16,6 +16,7 @@ import (
 func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.Mux {
 	pedidoRepo := &repository.PedidoRepository{Pool: pool}
 	inventarioRepo := &repository.InventarioRepository{Pool: pool}
+	progresoRepo := &repository.ProgresoItemRepository{Pool: pool}
 
 	pedidoHandler := &handler.PedidoHandler{Repo: pedidoRepo, InventarioRepo: inventarioRepo}
 	inventarioHandler := &handler.InventarioHandler{InventarioRepo: inventarioRepo, PedidoRepo: pedidoRepo}
@@ -31,15 +32,17 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 		PedidoRepo:     pedidoRepo,
 		InventarioRepo: inventarioRepo,
 		ReporteRepo:    reporteRepo,
+		ProgresoRepo:   progresoRepo,
 		Ledger:         ledgerAdapter,
 	}
 
 	empaqueRepo := &repository.EmpaqueRepository{Pool: pool}
 	empaqueHandler := &handler.EmpaqueHandler{
-		PedidoRepo:  pedidoRepo,
-		EmpaqueRepo: empaqueRepo,
-		ReporteRepo: reporteRepo,
-		Ledger:      ledgerAdapter,
+		PedidoRepo:   pedidoRepo,
+		EmpaqueRepo:  empaqueRepo,
+		ReporteRepo:  reporteRepo,
+		ProgresoRepo: progresoRepo,
+		Ledger:       ledgerAdapter,
 	}
 
 	despachoRepo := &repository.DespachoRepository{Pool: pool}
@@ -87,6 +90,7 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 	r.With(appmw.RequireRole("Picking", "Administrador")).Get("/api/picking", pickingHandler.ListarOrdenes)
 	r.With(appmw.RequireRole("Picking", "Administrador")).Get("/api/picking/historial", pickingHandler.ListarHistorial)
 	r.With(appmw.RequireRole("Picking")).Post("/api/picking/iniciar", pickingHandler.IniciarPicking)
+	r.With(appmw.RequireRole("Picking")).Get("/api/picking/{id}/siguiente-item", pickingHandler.SiguienteItem)
 	r.With(appmw.RequireRole("Picking")).Post("/api/picking/escanear-ubicacion", pickingHandler.EscanearUbicacion)
 	r.With(appmw.RequireRole("Picking")).Post("/api/picking/escanear-producto", pickingHandler.EscanearProducto)
 	r.With(appmw.RequireRole("Picking")).Post("/api/recoleccion", pickingHandler.ConfirmarRecoleccion)
@@ -95,6 +99,7 @@ func NuevoRouter(pool *pgxpool.Pool, ledgerAdapter *ledger.LedgerAdapter) *chi.M
 	r.With(appmw.RequireRole("Empaque")).Get("/api/empaque", empaqueHandler.ListarOrdenes)
 	r.With(appmw.RequireRole("Empaque")).Get("/api/empaque/historial", empaqueHandler.ListarHistorial)
 	r.With(appmw.RequireRole("Empaque")).Post("/api/empaque/recepcion", empaqueHandler.RecepcionEmpaque)
+	r.With(appmw.RequireRole("Empaque")).Get("/api/empaque/{id}/siguiente-item", empaqueHandler.SiguienteItem)
 	r.With(appmw.RequireRole("Empaque")).Post("/api/empaque/escanear", empaqueHandler.EscanearValidacion)
 	r.With(appmw.RequireRole("Empaque")).Post("/api/empaque", empaqueHandler.ConfirmarEmpaque)
 

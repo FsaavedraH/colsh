@@ -22,7 +22,7 @@ export default function ConfirmarEmpaquePage() {
   const { usuario } = useAuth();
   const idPedido = params.id as string;
 
-  const [producto, setProducto] = useState<ItemPedido | null>(null);
+  const [productos, setProductos] = useState<ItemPedido[]>([]);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState("");
   const [confirmado, setConfirmado] = useState(false);
@@ -31,7 +31,7 @@ export default function ConfirmarEmpaquePage() {
 
   useEffect(() => {
     apiFetch<Pedido>(`/api/pedidos/${idPedido}`, { rol: "Empaque" })
-      .then((data) => setProducto(data.productos?.[0] || null))
+      .then((data) => setProductos(data.productos || []))
       .catch((err) => setErrorCarga(err.message))
       .finally(() => setCargando(false));
   }, [idPedido]);
@@ -87,11 +87,17 @@ export default function ConfirmarEmpaquePage() {
       {cargando && <p className="text-gray-500 mb-4">Cargando pedido...</p>}
       {errorCarga && <p className="text-red-600 mb-4">Error: {errorCarga}</p>}
 
-      {producto && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-          <p className="text-xs text-blue-600 mb-1">Producto a empacar</p>
-          <p className="font-semibold text-blue-900">{producto.nombre}</p>
-          <p className="text-sm text-blue-700">Cantidad: {producto.cantidad}</p>
+      {productos.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+          <p className="text-sm text-gray-500 mb-3">Todos los productos ya fueron validados:</p>
+          <div className="divide-y divide-gray-100">
+            {productos.map((p, i) => (
+              <div key={i} className="flex justify-between py-2 text-sm">
+                <span>{p.nombre}</span>
+                <span className="font-semibold">x{p.cantidad}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

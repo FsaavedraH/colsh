@@ -9,14 +9,16 @@ import (
 	"github.com/FsaavedraH/colsh/backend/internal/ledger"
 	"github.com/FsaavedraH/colsh/backend/internal/repository"
 	"github.com/FsaavedraH/colsh/backend/internal/security"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 type EmpaqueHandler struct {
-	PedidoRepo  *repository.PedidoRepository
-	EmpaqueRepo *repository.EmpaqueRepository
-	ReporteRepo *repository.ReporteRepository
-	Ledger      *ledger.LedgerAdapter
+	PedidoRepo   *repository.PedidoRepository
+	EmpaqueRepo  *repository.EmpaqueRepository
+	ReporteRepo  *repository.ReporteRepository
+	ProgresoRepo *repository.ProgresoItemRepository
+	Ledger       *ledger.LedgerAdapter
 }
 
 func (h *EmpaqueHandler) registrarEnLedgerSiDisponible(idPedido, estado, responsable string) {
@@ -82,14 +84,64 @@ func (h *EmpaqueHandler) RecepcionEmpaque(w http.ResponseWriter, r *http.Request
 	})
 }
 
+// GET /api/empaque/{id}/siguiente-item - RF-17. Devuelve el proximo producto
+// del pedido que aun no ha sido validado en empaque.
+func (h *EmpaqueHandler) SiguienteItem(w http.ResponseWriter, r *http.Request) {
+	idParam := chi.URLParam(r, "id")
+	idPedido, err := uuid.Parse(idParam)
+	if err != nil {
+		http.Error(w, `{"error":"id invalido"}`, http.StatusBadRequest)
+		return
+	}
+
+	total, err := h.ProgresoRepo.TotalItems(r.Context(), idPedido)
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo consultar el pedido"}`, http.StatusInternalServerError)
+		return
+	}
+
+	pendientes, err := h.ProgresoRepo.ContarPendientes(r.Context(), idPedido, "empaque")
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo consultar el progreso"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if pendientes == 0 {
+		json.NewEncoder(w).Encode(SiguienteItemResponse{
+			Completo:   true,
+			Procesados: total,
+			TotalItems: total,
+		})
+		return
+	}
+
+	item, err := h.ProgresoRepo.SiguienteItemPendiente(r.Context(), idPedido, "empaque")
+	if err != nil || item == nil {
+		http.Error(w, `{"error":"No se pudo obtener el siguiente item"}`, http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(SiguienteItemResponse{
+		Completo:   false,
+		Item:       item,
+		Procesados: total - pendientes,
+		TotalItems: total,
+	})
+}
+
 type EscanearValidacionEmpaqueRequest struct {
 	IDPedido            string `json:"id_pedido"`
 	IDProductoEsperado  string `json:"id_producto_esperado"`
 	IDProductoEscaneado string `json:"id_producto_escaneado"`
+	Responsable         string `json:"responsable"`
 }
 
 // POST /api/empaque/escanear - RF-17, RF-26. El producto escaneado llega como
 // token firmado (HMAC); se valida la firma antes de comparar contra el esperado.
+// Si coincide, registra este item como validado en empaque (soporta pedidos
+// con varios productos distintos, uno a la vez).
 func (h *EmpaqueHandler) EscanearValidacion(w http.ResponseWriter, r *http.Request) {
 	var req EscanearValidacionEmpaqueRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -100,6 +152,18 @@ func (h *EmpaqueHandler) EscanearValidacion(w http.ResponseWriter, r *http.Reque
 	idPedido, err := uuid.Parse(req.IDPedido)
 	if err != nil {
 		http.Error(w, `{"error":"id_pedido invalido"}`, http.StatusBadRequest)
+		return
+	}
+
+	idProductoEsperado, err := uuid.Parse(req.IDProductoEsperado)
+	if err != nil {
+		http.Error(w, `{"error":"id_producto_esperado invalido"}`, http.StatusBadRequest)
+		return
+	}
+
+	responsable, err := uuid.Parse(req.Responsable)
+	if err != nil {
+		http.Error(w, `{"error":"responsable invalido"}`, http.StatusBadRequest)
 		return
 	}
 
@@ -129,9 +193,17 @@ func (h *EmpaqueHandler) EscanearValidacion(w http.ResponseWriter, r *http.Reque
 
 	h.ReporteRepo.RegistrarIntentoEscaneo(r.Context(), idPedido, "producto", "correcto", "empaque")
 
+	if err := h.ProgresoRepo.RegistrarProgreso(r.Context(), idPedido, idProductoEsperado, "empaque", 0, responsable); err != nil {
+		http.Error(w, `{"error":"No se pudo registrar el progreso de empaque"}`, http.StatusInternalServerError)
+		return
+	}
+
+	pendientes, _ := h.ProgresoRepo.ContarPendientes(r.Context(), idPedido, "empaque")
+
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"coincide": true,
-		"mensaje":  "Producto validado correctamente para empaque",
+		"coincide":   true,
+		"mensaje":    "Producto validado correctamente para empaque",
+		"pendientes": pendientes,
 	})
 }
 
@@ -140,7 +212,8 @@ type ConfirmarEmpaqueRequest struct {
 	Responsable string `json:"responsable"`
 }
 
-// POST /api/empaque - RF-18, RF-24
+// POST /api/empaque - RF-18, RF-24. Solo finaliza el empaque completo del pedido
+// si TODOS sus items ya fueron validados via /api/empaque/escanear.
 func (h *EmpaqueHandler) ConfirmarEmpaque(w http.ResponseWriter, r *http.Request) {
 	var req ConfirmarEmpaqueRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -157,6 +230,16 @@ func (h *EmpaqueHandler) ConfirmarEmpaque(w http.ResponseWriter, r *http.Request
 	responsable, err := uuid.Parse(req.Responsable)
 	if err != nil {
 		http.Error(w, `{"error":"responsable invalido"}`, http.StatusBadRequest)
+		return
+	}
+
+	pendientes, err := h.ProgresoRepo.ContarPendientes(r.Context(), idPedido, "empaque")
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo verificar el progreso del pedido"}`, http.StatusInternalServerError)
+		return
+	}
+	if pendientes > 0 {
+		http.Error(w, `{"error":"Aun quedan productos por validar en empaque"}`, http.StatusConflict)
 		return
 	}
 
