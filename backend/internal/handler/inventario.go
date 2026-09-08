@@ -219,3 +219,17 @@ func (h *InventarioHandler) ListarParaCodigosQR(w http.ResponseWriter, r *http.R
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resultado)
 }
+
+// GET /api/inventario/demanda-espera - Solo Administrador. Por cada producto con
+// pedidos "En espera por inventario", cuanta cantidad total hace falta y en
+// cuantos pedidos distintos. Ayuda a decidir cuanto comprar realmente.
+func (h *InventarioHandler) ListarDemandaEnEspera(w http.ResponseWriter, r *http.Request) {
+	demanda, err := h.InventarioRepo.ObtenerDemandaEnEspera(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"No se pudo obtener la demanda en espera"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(demanda)
+}

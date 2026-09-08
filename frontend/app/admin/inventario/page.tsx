@@ -23,15 +23,22 @@ interface Compra {
   nombre_responsable: string;
 }
 
+interface DemandaProducto {
+  id_producto: string;
+  cantidad_necesaria: number;
+  pedidos_afectados: number;
+}
+
 function formatearCOP(valor: number | null) {
   if (valor === null) return "—";
   return valor.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 }
 
-export default function IngresoComprasPage() {
+export default function InventarioPage() {
   const { usuario } = useAuth();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [compras, setCompras] = useState<Compra[]>([]);
+  const [demanda, setDemanda] = useState<DemandaProducto[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
 
@@ -48,12 +55,14 @@ export default function IngresoComprasPage() {
     setCargando(true);
     setError("");
     try {
-      const [productosData, comprasData] = await Promise.all([
+      const [productosData, comprasData, demandaData] = await Promise.all([
         apiFetch<Producto[]>("/api/productos", { rol: "Administrador" }),
         apiFetch<Compra[]>("/api/inventario/compras", { rol: "Administrador" }),
+        apiFetch<DemandaProducto[]>("/api/inventario/demanda-espera", { rol: "Administrador" }),
       ]);
       setProductos(productosData || []);
       setCompras(comprasData || []);
+      setDemanda(demandaData || []);
       if (productosData && productosData.length > 0 && !idProducto) {
         setIdProducto(productosData[0].id_producto);
       }
@@ -97,58 +106,144 @@ export default function IngresoComprasPage() {
     }
   }
 
+  function nombreDe(idProd: string) {
+    return productos.find((p) => p.id_producto === idProd)?.nombre || "Producto";
+  }
+
+  function stockDe(idProd: string) {
+    return productos.find((p) => p.id_producto === idProd)?.stock ?? 0;
+  }
+
+  function seleccionarParaComprar(idProd: string) {
+    setIdProducto(idProd);
+  }
+
+  const demandaOrdenada = [...demanda].sort((a, b) => {
+    const faltanteA = a.cantidad_necesaria - stockDe(a.id_producto);
+    const faltanteB = b.cantidad_necesaria - stockDe(b.id_producto);
+    return faltanteB - faltanteA;
+  });
+
   const productoSeleccionado = productos.find((p) => p.id_producto === idProducto);
+  const demandaSeleccionada = demanda.find((d) => d.id_producto === idProducto);
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-1">Ingreso de compras</h1>
+      <h1 className="text-2xl font-bold mb-1">Inventario</h1>
       <p className="text-gray-500 mb-6">
-        Registra la entrada de repuestos comprados. Solo suma stock a productos existentes.
+        Gestiona el stock de repuestos y registra los ingresos de compra.
       </p>
 
-      <form
-        onSubmit={registrarCompra}
-        className="bg-white rounded-xl border border-gray-200 p-5 mb-8 max-w-lg"
-      >
-        <h2 className="font-semibold mb-4">Nueva compra</h2>
+      <div className="grid lg:grid-cols-3 gap-6 mb-8">
+        {/* Columna izquierda: formulario de ingreso de compra */}
+        <div className="lg:col-span-2">
+          <form
+            onSubmit={registrarCompra}
+            className="bg-white rounded-xl border border-gray-200 p-5"
+          >
+            <h2 className="font-semibold mb-4">Ingreso de compra</h2>
 
-        <label className="text-sm text-gray-500 block mb-1">Producto</label>
-        <select
-          value={idProducto}
-          onChange={(e) => setIdProducto(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-1"
-        >
-          {productos.map((p) => (
-            <option key={p.id_producto} value={p.id_producto}>
-              {p.nombre} (stock actual: {p.stock})
-            </option>
-          ))}
-        </select>
-        {productoSeleccionado && (
-          <p className="text-xs text-gray-400 mb-3">
-            Ubicación: {productoSeleccionado.ubicacion}
-          </p>
-        )}
+            <label className="text-sm text-gray-500 block mb-1">Producto</label>
+            <select
+              value={idProducto}
+              onChange={(e) => setIdProducto(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-1"
+            >
+              {productos.map((p) => {
+                const d = demanda.find((dd) => dd.id_producto === p.id_producto);
+                return (
+                  <option key={p.id_producto} value={p.id_producto}>
+                    {p.nombre} (stock actual: {p.stock})
+                    {d ? ` — ⚠ ${d.pedidos_afectados} pedido(s) esperando` : ""}
+                  </option>
+                );
+              })}
+            </select>
+            {productoSeleccionado && (
+              <p className="text-xs text-gray-400 mb-3">
+                Ubicación: {productoSeleccionado.ubicacion}
+              </p>
+            )}
 
-        <label className="text-sm text-gray-500 block mb-1 mt-3">Cantidad comprada</label>
-        <input
-          type="number"
-          value={cantidad}
-          onChange={(e) => setCantidad(Number(e.target.value))}
-          min={1}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4"
-        />
+            {demandaSeleccionada && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-sm text-amber-800">
+                ⚠️ Hay <strong>{demandaSeleccionada.pedidos_afectados}</strong> pedido(s) en espera que
+                necesitan <strong>{demandaSeleccionada.cantidad_necesaria}</strong> unidades de este
+                producto en total.
+                {productoSeleccionado && (
+                  <>
+                    {" "}
+                    Con el stock actual ({productoSeleccionado.stock}), te faltarían{" "}
+                    <strong>
+                      {Math.max(0, demandaSeleccionada.cantidad_necesaria - productoSeleccionado.stock)}
+                    </strong>{" "}
+                    unidades más para cubrir todos esos pedidos.
+                  </>
+                )}
+              </div>
+            )}
 
-        {errorFormulario && (
-          <div className="bg-red-100 text-red-700 text-sm rounded-lg p-3 mb-4">
-            {errorFormulario}
+            <label className="text-sm text-gray-500 block mb-1 mt-3">Cantidad comprada</label>
+            <input
+              type="number"
+              value={cantidad}
+              onChange={(e) => setCantidad(Number(e.target.value))}
+              min={1}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4"
+            />
+
+            {errorFormulario && (
+              <div className="bg-red-100 text-red-700 text-sm rounded-lg p-3 mb-4">
+                {errorFormulario}
+              </div>
+            )}
+
+            <Button type="submit" disabled={registrando}>
+              {registrando ? "Registrando..." : "Registrar compra"}
+            </Button>
+          </form>
+        </div>
+
+        {/* Columna derecha: panel de alerta de pedidos esperando inventario */}
+        <div>
+          <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 h-full">
+            <h2 className="font-semibold text-amber-900 mb-1 text-sm">
+              ⚠️ Por comprar ({demanda.length})
+            </h2>
+            <p className="text-xs text-amber-700 mb-3">
+              Pedidos de clientes bloqueados por falta de stock.
+            </p>
+
+            {demanda.length === 0 && (
+              <p className="text-xs text-amber-700">No hay pedidos esperando inventario ahora mismo.</p>
+            )}
+
+            <div className="max-h-96 overflow-y-auto space-y-2">
+              {demandaOrdenada.map((d) => {
+                const stockActual = stockDe(d.id_producto);
+                const faltante = Math.max(0, d.cantidad_necesaria - stockActual);
+                return (
+                  <button
+                    key={d.id_producto}
+                    onClick={() => seleccionarParaComprar(d.id_producto)}
+                    className={`w-full text-left bg-white rounded-lg border px-3 py-2 hover:border-blue-400 transition-colors ${
+                      idProducto === d.id_producto ? "border-blue-500 ring-1 ring-blue-200" : "border-amber-200"
+                    }`}
+                  >
+                    <p className="font-semibold text-gray-800 text-sm">{nombreDe(d.id_producto)}</p>
+                    <p className="text-xs text-gray-500">
+                      {d.pedidos_afectados} pedido(s) · stock: {stockActual}
+                      {faltante > 0 && (
+                        <span className="text-amber-700 font-semibold"> · faltan {faltante}</span>
+                      )}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        )}
-
-        <Button type="submit" disabled={registrando}>
-          {registrando ? "Registrando..." : "Registrar compra"}
-        </Button>
-      </form>
+        </div>
+      </div>
 
       <h2 className="font-semibold mb-3">Historial de compras</h2>
 

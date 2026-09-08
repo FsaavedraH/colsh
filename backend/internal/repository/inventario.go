@@ -256,3 +256,39 @@ func (r *InventarioRepository) ListarCompras(ctx context.Context) ([]CompraResum
 	}
 	return resultado, nil
 }
+
+type DemandaProducto struct {
+	IDProducto        string `json:"id_producto"`
+	CantidadNecesaria int    `json:"cantidad_necesaria"`
+	PedidosAfectados  int    `json:"pedidos_afectados"`
+}
+
+// ObtenerDemandaEnEspera: por cada producto, cuanta cantidad total y en cuantos
+// pedidos distintos hace falta stock, entre los pedidos "En espera por inventario".
+// Ayuda al Admin a saber cuanto comprar para desbloquear pedidos reales, en vez
+// de adivinar solo con el stock actual.
+func (r *InventarioRepository) ObtenerDemandaEnEspera(ctx context.Context) ([]DemandaProducto, error) {
+	rows, err := r.Pool.Query(ctx, `
+		SELECT dp.id_producto, SUM(dp.cantidad), COUNT(DISTINCT dp.id_pedido)
+		FROM detalle_pedido dp
+		JOIN pedido p ON p.id_pedido = dp.id_pedido
+		WHERE p.estado = 'En espera por inventario'
+		GROUP BY dp.id_producto
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var resultado []DemandaProducto
+	for rows.Next() {
+		var d DemandaProducto
+		var idProducto uuid.UUID
+		if err := rows.Scan(&idProducto, &d.CantidadNecesaria, &d.PedidosAfectados); err != nil {
+			return nil, err
+		}
+		d.IDProducto = idProducto.String()
+		resultado = append(resultado, d)
+	}
+	return resultado, nil
+}
