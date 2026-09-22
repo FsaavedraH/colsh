@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { colorPorEstado } from "@/lib/estadoColor";
 import Badge from "@/components/ui/Badge";
 
 interface Orden {
@@ -52,7 +53,7 @@ export default function HistorialTransportistaPage() {
               <div className="font-semibold text-gray-800">{o.nombre_cliente}</div>
               <div className="text-sm text-gray-500 mt-1">{formatearFecha(o.fecha_creacion)} · {o.total_items} ítem{o.total_items !== 1 ? "s" : ""}</div>
             </div>
-            <Badge color="green">{o.estado}</Badge>
+            <Badge color={colorPorEstado(o.estado)}>{o.estado}</Badge>
           </div>
         ))}
       </div>

@@ -94,13 +94,13 @@ export default function CodigosQRPage() {
         Selecciona los productos que necesitas etiquetar (nuevos ingresos, reposición de etiquetas dañadas, etc.). Los códigos generados están firmados digitalmente: no pueden falsificarse con otro generador de QR.
       </p>
 
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex flex-wrap items-center gap-3 mb-4">
         <input
           type="text"
           placeholder="Buscar producto..."
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 max-w-sm"
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 min-w-[180px] max-w-sm"
         />
         <button onClick={seleccionarTodos} className="text-sm text-blue-600 hover:underline">
           Seleccionar todos
@@ -114,6 +114,7 @@ export default function CodigosQRPage() {
       {error && <p className="text-red-600">Error: {error}</p>}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-left">
             <tr>
@@ -145,6 +146,7 @@ export default function CodigosQRPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <Button onClick={() => setMostrarImpresion(true)} disabled={seleccionados.size === 0}>

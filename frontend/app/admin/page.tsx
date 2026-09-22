@@ -151,6 +151,7 @@ export default function UsuariosPage() {
       {error && <p className="text-red-600">Error: {error}</p>}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-left">
             <tr>
@@ -171,6 +172,7 @@ export default function UsuariosPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

@@ -1,18 +1,17 @@
-import Sidebar from "@/components/layout/Sidebar";
+import AppShell from "@/components/layout/AppShell";
 import RutaProtegida from "@/components/layout/RutaProtegida";
 
 const itemsPicking = [
-  { label: "Órdenes de Picking", href: "/picking" },
-  { label: "Historial", href: "/picking/historial" },
+  { label: "Órdenes de Picking", href: "/picking", icon: "scan" as const },
+  { label: "Historial", href: "/picking/historial", icon: "history" as const },
 ];
 
 export default function PickingLayout({ children }: { children: React.ReactNode }) {
   return (
     <RutaProtegida rolPermitido="Picking">
-      <div className="flex min-h-screen">
-        <Sidebar items={itemsPicking} colorRol="#d97706" />
-        <main className="flex-1 p-6 bg-gray-50">{children}</main>
-      </div>
+      <AppShell items={itemsPicking} accentColor="#d97706">
+        {children}
+      </AppShell>
     </RutaProtegida>
   );
 }

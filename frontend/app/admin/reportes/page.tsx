@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { colorPorEstado } from "@/lib/estadoColor";
 import Badge from "@/components/ui/Badge";
 
 interface Pedido {
@@ -57,7 +58,6 @@ const colorTarjeta: Record<string, string> = {
   "Entregado": "bg-green-100 text-green-700",
 };
 
-// Grafica de linea simple con SVG, sin dependencias externas.
 function GraficaTendencia({ datos }: { datos: PedidoPorDia[] }) {
   if (datos.length === 0) {
     return <p className="text-gray-400 text-sm py-8 text-center">Sin pedidos en los últimos 14 días.</p>;
@@ -177,7 +177,6 @@ export default function ReportesPage() {
 
       {error && <p className="text-red-600 mb-4">Error: {error}</p>}
 
-      {/* SECCION 1: Tendencia principal, arriba y destacada */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <div className="flex justify-between items-baseline mb-4">
           <h2 className="font-semibold">Tendencia de pedidos (últimos 14 días)</h2>
@@ -186,7 +185,6 @@ export default function ReportesPage() {
         <GraficaTendencia datos={pedidosPorDia} />
       </div>
 
-      {/* SECCION 2: Tarjetas de conteo por estado */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
         {estados.slice(1).map((estado) => {
           const conteo = conteos.find((c) => c.estado === estado);
@@ -199,7 +197,6 @@ export default function ReportesPage() {
         })}
       </div>
 
-      {/* SECCION 3: Indicadores de apoyo, en grid de 3 columnas */}
       <div className="grid md:grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <h2 className="font-semibold mb-3 text-sm">Tiempo promedio por etapa</h2>
@@ -270,7 +267,6 @@ export default function ReportesPage() {
         </div>
       </div>
 
-      {/* SECCION 4: Tabla de pedidos + Trazabilidad, lado a lado */}
       <div className="grid md:grid-cols-2 gap-4">
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex justify-between items-center mb-4">
@@ -290,6 +286,7 @@ export default function ReportesPage() {
 
           {cargando && <p className="text-gray-500 text-sm">Cargando...</p>}
 
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-gray-500 text-left border-b border-gray-100">
               <tr>
@@ -310,12 +307,13 @@ export default function ReportesPage() {
                   <td className="py-2 font-mono text-xs">{p.id_pedido.slice(0, 8).toUpperCase()}</td>
                   <td className="py-2">{p.nombre_cliente}</td>
                   <td className="py-2">
-                    <Badge color="yellow">{p.estado}</Badge>
+                    <Badge color={colorPorEstado(p.estado)}>{p.estado}</Badge>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
 
           {!cargando && pedidos.length === 0 && (
             <p className="text-gray-500 text-sm py-4">No hay pedidos con ese filtro.</p>

@@ -70,9 +70,11 @@ func (r *PedidoRepository) Crear(ctx context.Context, pedido *domain.Pedido, pro
 func (r *PedidoRepository) ConsultarPorID(ctx context.Context, id uuid.UUID) (*domain.Pedido, error) {
 	var p domain.Pedido
 	err := r.Pool.QueryRow(ctx,
-		`SELECT id_pedido, fecha_creacion, estado, id_cliente, direccion_entrega
-		 FROM pedido WHERE id_pedido = $1`, id,
-	).Scan(&p.IDPedido, &p.FechaCreacion, &p.Estado, &p.IDCliente, &p.DireccionEntrega)
+		`SELECT p.id_pedido, p.fecha_creacion, p.estado, p.id_cliente, u.nombre, p.direccion_entrega
+		 FROM pedido p
+		 JOIN usuario u ON u.id_usuario = p.id_cliente
+		 WHERE p.id_pedido = $1`, id,
+	).Scan(&p.IDPedido, &p.FechaCreacion, &p.Estado, &p.IDCliente, &p.NombreCliente, &p.DireccionEntrega)
 	if err != nil {
 		return nil, err
 	}
@@ -111,9 +113,6 @@ func (r *PedidoRepository) ObtenerProductosDelPedido(ctx context.Context, idPedi
 	return productos, nil
 }
 
-// ObtenerDetalleConNombres: igual que ObtenerProductosDelPedido pero con el nombre
-// y la ubicacion del producto ya resueltos, para mostrar en pantalla de detalle
-// del pedido y para que Picking/Empaque sepan automaticamente que validar.
 func (r *PedidoRepository) ObtenerDetalleConNombres(ctx context.Context, idPedido uuid.UUID) ([]ItemDetallePedido, error) {
 	rows, err := r.Pool.Query(ctx, `
 		SELECT p.id_producto, p.nombre, dp.cantidad, COALESCE(MAX(i.ubicacion), '')
@@ -149,7 +148,7 @@ func (r *PedidoRepository) listarPorEstados(ctx context.Context, estados []strin
 		LEFT JOIN detalle_pedido dp ON dp.id_pedido = p.id_pedido
 		WHERE p.estado = ANY($1)
 		GROUP BY p.id_pedido, p.fecha_creacion, p.estado, u.nombre
-		ORDER BY p.fecha_creacion DESC
+		ORDER BY p.fecha_creacion ASC
 	`, estados)
 	if err != nil {
 		return nil, err
@@ -167,42 +166,34 @@ func (r *PedidoRepository) listarPorEstados(ctx context.Context, estados []strin
 	return resultado, nil
 }
 
-// ListarPorEstado: consulta generica por un unico estado (usada para reactivar pedidos en espera)
 func (r *PedidoRepository) ListarPorEstado(ctx context.Context, estado string) ([]PedidoPickingResumen, error) {
 	return r.listarPorEstados(ctx, []string{estado})
 }
 
-// RF-09, RF-10: lista pedidos "Pendiente" (por iniciar) y "En recoleccion" (ya en proceso)
 func (r *PedidoRepository) ListarParaPicking(ctx context.Context) ([]PedidoPickingResumen, error) {
 	return r.listarPorEstados(ctx, []string{"Pendiente", "En recoleccion"})
 }
 
-// Historial de Picking: pedidos que ya pasaron por recoleccion
 func (r *PedidoRepository) ListarHistorialPicking(ctx context.Context) ([]PedidoPickingResumen, error) {
 	return r.listarPorEstados(ctx, []string{"En empaque", "En despacho", "Entregado"})
 }
 
-// RF-15: lista pedidos en "En empaque"
 func (r *PedidoRepository) ListarParaEmpaque(ctx context.Context) ([]PedidoPickingResumen, error) {
 	return r.listarPorEstados(ctx, []string{"En empaque"})
 }
 
-// Historial de Empaque: pedidos que ya pasaron por empaque
 func (r *PedidoRepository) ListarHistorialEmpaque(ctx context.Context) ([]PedidoPickingResumen, error) {
 	return r.listarPorEstados(ctx, []string{"En despacho", "Entregado"})
 }
 
-// RF-20: lista pedidos en "En despacho"
 func (r *PedidoRepository) ListarParaDespacho(ctx context.Context) ([]PedidoPickingResumen, error) {
 	return r.listarPorEstados(ctx, []string{"En despacho"})
 }
 
-// Historial de Transportista: pedidos ya entregados
 func (r *PedidoRepository) ListarHistorialDespacho(ctx context.Context) ([]PedidoPickingResumen, error) {
 	return r.listarPorEstados(ctx, []string{"Entregado"})
 }
 
-// Mis pedidos: todos los pedidos de un cliente especifico, sin importar el estado
 func (r *PedidoRepository) ListarPorCliente(ctx context.Context, idCliente uuid.UUID) ([]PedidoPickingResumen, error) {
 	rows, err := r.Pool.Query(ctx, `
 		SELECT p.id_pedido, p.fecha_creacion, p.estado, u.nombre,

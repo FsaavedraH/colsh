@@ -1,21 +1,20 @@
-import Sidebar from "@/components/layout/Sidebar";
+import AppShell from "@/components/layout/AppShell";
 import RutaProtegida from "@/components/layout/RutaProtegida";
 
 const itemsAdmin = [
-  { label: "Usuarios", href: "/admin" },
-  { label: "Inventario", href: "/admin/inventario" },
-  { label: "Códigos QR", href: "/admin/codigos-qr" },
-  { label: "Ledger", href: "/admin/ledger" },
-  { label: "Reportes", href: "/admin/reportes" },
+  { label: "Usuarios", href: "/admin", icon: "users" as const },
+  { label: "Inventario", href: "/admin/inventario", icon: "box" as const },
+  { label: "Códigos QR", href: "/admin/codigos-qr", icon: "qrcode" as const },
+  { label: "Ledger", href: "/admin/ledger", icon: "activity" as const },
+  { label: "Reportes", href: "/admin/reportes", icon: "filetext" as const },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <RutaProtegida rolPermitido="Administrador">
-      <div className="flex min-h-screen">
-        <Sidebar items={itemsAdmin} colorRol="#0f172a" />
-        <main className="flex-1 p-6 bg-gray-50">{children}</main>
-      </div>
+      <AppShell items={itemsAdmin} accentColor="#0f172a">
+        {children}
+      </AppShell>
     </RutaProtegida>
   );
 }

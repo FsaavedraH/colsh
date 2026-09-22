@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { colorPorEstado } from "@/lib/estadoColor";
 import Badge from "@/components/ui/Badge";
 import RutaProtegida from "@/components/layout/RutaProtegida";
 
@@ -41,12 +42,18 @@ function ListaMisPedidos() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-1">Mis pedidos</h1>
-      <p className="text-gray-500 mb-6">Historial completo de tus pedidos</p>
+      <p className="text-gray-500 mb-6">
+        {cargando ? "Cargando..." : `${pedidos.length} pedido${pedidos.length !== 1 ? "s" : ""} en tu historial`}
+      </p>
 
-      {cargando && <p className="text-gray-500">Cargando...</p>}
-      {error && <p className="text-red-600">Error: {error}</p>}
+      {error && <p className="text-red-600 mb-4">Error: {error}</p>}
       {!cargando && !error && pedidos.length === 0 && (
-        <p className="text-gray-500">Todavía no tienes pedidos.</p>
+        <div className="bg-white rounded-xl border border-gray-200 border-dashed p-10 text-center">
+          <p className="text-gray-500 mb-3">Todavía no tienes pedidos.</p>
+          <Link href="/cliente" className="text-blue-600 font-medium hover:underline text-sm">
+            Ir al catálogo
+          </Link>
+        </div>
       )}
 
       <div className="space-y-3">
@@ -59,9 +66,11 @@ function ListaMisPedidos() {
             <div className="flex justify-between items-start">
               <div>
                 <div className="font-mono text-sm text-gray-500">{p.id_pedido.slice(0, 8).toUpperCase()}</div>
-                <div className="text-sm text-gray-500 mt-1">{formatearFecha(p.fecha_creacion)} · {p.total_items} ítem{p.total_items !== 1 ? "s" : ""}</div>
+                <div className="text-sm text-gray-500 mt-1">
+                  {formatearFecha(p.fecha_creacion)} · {p.total_items} ítem{p.total_items !== 1 ? "s" : ""}
+                </div>
               </div>
-              <Badge color="yellow">{p.estado}</Badge>
+              <Badge color={colorPorEstado(p.estado)}>{p.estado}</Badge>
             </div>
           </Link>
         ))}

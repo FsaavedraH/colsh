@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { colorPorEstado } from "@/lib/estadoColor";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 
@@ -10,7 +11,7 @@ interface Pedido {
   id_pedido: string;
   fecha_creacion: string;
   estado: string;
-  id_cliente: string;
+  nombre_cliente: string;
   direccion_entrega: string;
 }
 
@@ -73,12 +74,12 @@ export default function DetalleEmpaquePage() {
           <h1 className="text-xl font-bold">Orden {pedido.id_pedido.slice(0, 8).toUpperCase()}</h1>
           <p className="text-gray-500 text-sm">{pedido.direccion_entrega}</p>
         </div>
-        <Badge color="green">{pedido.estado}</Badge>
+        <Badge color={colorPorEstado(pedido.estado)}>{pedido.estado}</Badge>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <p className="text-sm text-gray-500 mb-1">Cliente</p>
-        <p className="font-semibold mb-4">{pedido.id_cliente}</p>
+        <p className="font-semibold mb-4">{pedido.nombre_cliente}</p>
 
         <p className="text-sm text-gray-500 mb-1">Fecha de creación</p>
         <p className="font-semibold">

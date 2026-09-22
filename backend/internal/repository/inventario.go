@@ -144,19 +144,20 @@ func (r *InventarioRepository) ObtenerUbicacion(ctx context.Context, idProducto 
 }
 
 type ProductoCatalogo struct {
-	IDProducto string `json:"id_producto"`
-	Nombre     string `json:"nombre"`
-	Stock      int    `json:"stock"`
-	Ubicacion  string `json:"ubicacion"`
+	IDProducto    string  `json:"id_producto"`
+	Nombre        string  `json:"nombre"`
+	Stock         int     `json:"stock"`
+	Ubicacion     string  `json:"ubicacion"`
+	CostoUnitario float64 `json:"costo_unitario"`
 }
 
 // ListarCatalogo devuelve todos los productos con su stock disponible.
 func (r *InventarioRepository) ListarCatalogo(ctx context.Context) ([]ProductoCatalogo, error) {
 	rows, err := r.Pool.Query(ctx, `
-		SELECT p.id_producto, p.nombre, COALESCE(SUM(i.stock), 0) as stock, MAX(i.ubicacion) as ubicacion
+		SELECT p.id_producto, p.nombre, COALESCE(SUM(i.stock), 0) as stock, MAX(i.ubicacion) as ubicacion, p.costo_unitario
 		FROM producto p
 		LEFT JOIN inventario i ON i.id_producto = p.id_producto
-		GROUP BY p.id_producto, p.nombre
+		GROUP BY p.id_producto, p.nombre, p.costo_unitario
 		ORDER BY p.nombre ASC
 	`)
 	if err != nil {
@@ -167,7 +168,7 @@ func (r *InventarioRepository) ListarCatalogo(ctx context.Context) ([]ProductoCa
 	var resultado []ProductoCatalogo
 	for rows.Next() {
 		var pc ProductoCatalogo
-		if err := rows.Scan(&pc.IDProducto, &pc.Nombre, &pc.Stock, &pc.Ubicacion); err != nil {
+		if err := rows.Scan(&pc.IDProducto, &pc.Nombre, &pc.Stock, &pc.Ubicacion, &pc.CostoUnitario); err != nil {
 			return nil, err
 		}
 		resultado = append(resultado, pc)

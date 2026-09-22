@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import { colorPorEstado } from "@/lib/estadoColor";
 import Badge from "@/components/ui/Badge";
 
 interface OrdenEmpaque {
@@ -75,7 +76,7 @@ export default function ListaEmpaquePage() {
                   {formatearFecha(orden.fecha_creacion)} · {orden.total_items} ítem{orden.total_items !== 1 ? "s" : ""}
                 </div>
               </div>
-              <Badge color="green">{orden.estado}</Badge>
+              <Badge color={colorPorEstado(orden.estado)}>{orden.estado}</Badge>
             </div>
           </Link>
         ))}

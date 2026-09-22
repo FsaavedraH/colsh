@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { colorPorEstado } from "@/lib/estadoColor";
 import Badge from "@/components/ui/Badge";
 
 interface ItemPedido {
@@ -81,6 +82,7 @@ export default function ConsultaPedidoPage() {
   const enEsperaPorInventario = pedido.estado === "En espera por inventario";
   const esCancelable = ESTADOS_CANCELABLES.includes(pedido.estado);
   const estaCancelado = pedido.estado === "Cancelado";
+  const estaEntregado = pedido.estado === "Entregado";
 
   return (
     <div className="max-w-xl">
@@ -93,9 +95,19 @@ export default function ConsultaPedidoPage() {
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
         <div className="text-center mb-6">
-          <div className="text-3xl mb-2">{estaCancelado ? "✕" : "✓"}</div>
+          <div
+            className={`w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center text-xl ${
+              estaCancelado
+                ? "bg-red-100 text-red-600"
+                : estaEntregado
+                ? "bg-green-100 text-green-600"
+                : "bg-blue-100 text-blue-600"
+            }`}
+          >
+            {estaCancelado ? "✕" : "✓"}
+          </div>
           <h1 className="text-lg font-bold">
-            {estaCancelado ? "Pedido cancelado" : "¡Pedido creado con éxito!"}
+            {estaCancelado ? "Pedido cancelado" : estaEntregado ? "Pedido entregado" : "¡Pedido creado con éxito!"}
           </h1>
           <p className="text-sm text-gray-500">
             Número de pedido: {pedido.id_pedido.slice(0, 8).toUpperCase()}
@@ -136,7 +148,7 @@ export default function ConsultaPedidoPage() {
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <p className="text-sm text-gray-500 mb-1">Estado actual</p>
-        <Badge color={estaCancelado ? "red" : "yellow"}>{pedido.estado}</Badge>
+        <Badge color={colorPorEstado(pedido.estado)}>{pedido.estado}</Badge>
 
         <p className="text-sm text-gray-500 mt-4 mb-1">Dirección de entrega</p>
         <p className="font-semibold">{pedido.direccion_entrega}</p>

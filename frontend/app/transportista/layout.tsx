@@ -1,18 +1,17 @@
-import Sidebar from "@/components/layout/Sidebar";
+import AppShell from "@/components/layout/AppShell";
 import RutaProtegida from "@/components/layout/RutaProtegida";
 
 const itemsTransportista = [
-  { label: "Mis despachos", href: "/transportista" },
-  { label: "Historial", href: "/transportista/historial" },
+  { label: "Mis despachos", href: "/transportista", icon: "truck" as const },
+  { label: "Historial", href: "/transportista/historial", icon: "history" as const },
 ];
 
 export default function TransportistaLayout({ children }: { children: React.ReactNode }) {
   return (
     <RutaProtegida rolPermitido="Transportista">
-      <div className="flex min-h-screen">
-        <Sidebar items={itemsTransportista} colorRol="#b45309" />
-        <main className="flex-1 p-6 bg-gray-50">{children}</main>
-      </div>
+      <AppShell items={itemsTransportista} accentColor="#b45309">
+        {children}
+      </AppShell>
     </RutaProtegida>
   );
 }

@@ -135,7 +135,6 @@ export default function InventarioPage() {
       </p>
 
       <div className="grid lg:grid-cols-3 gap-6 mb-8">
-        {/* Columna izquierda: formulario de ingreso de compra */}
         <div className="lg:col-span-2">
           <form
             onSubmit={registrarCompra}
@@ -204,7 +203,6 @@ export default function InventarioPage() {
           </form>
         </div>
 
-        {/* Columna derecha: panel de alerta de pedidos esperando inventario */}
         <div>
           <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 h-full">
             <h2 className="font-semibold text-amber-900 mb-1 text-sm">
@@ -254,6 +252,7 @@ export default function InventarioPage() {
       )}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-left">
             <tr>
@@ -280,6 +279,7 @@ export default function InventarioPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

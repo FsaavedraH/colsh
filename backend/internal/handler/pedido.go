@@ -31,10 +31,6 @@ type ProductoPedido struct {
 	Cantidad   int    `json:"cantidad"`
 }
 
-// POST /api/pedidos - RF-01, RF-02, RF-03. Reserva (descuenta) el stock de inmediato
-// para evitar sobreventa entre pedidos concurrentes (RF-05). Si no alcanza, el pedido
-// queda "En espera por inventario" sin haber tocado el stock. El primer evento del
-// ledger para este pedido se registra aqui mismo, desde el Cliente.
 func (h *PedidoHandler) CrearPedido(w http.ResponseWriter, r *http.Request) {
 	var req CrearPedidoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -84,8 +80,6 @@ func (h *PedidoHandler) CrearPedido(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// RF-24: primer evento del pedido en el ledger, registrado desde su creacion
-	// por el Cliente (no solo desde que Picking lo toca).
 	registrarEnLedgerOEncolar(r.Context(), h.Ledger, h.ColaLedgerRepo, pedido.IDPedido, estadoFinal, req.ClienteID)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -101,11 +95,11 @@ type PedidoConDetalle struct {
 	FechaCreacion    time.Time                      `json:"fecha_creacion"`
 	Estado           string                         `json:"estado"`
 	IDCliente        uuid.UUID                      `json:"id_cliente"`
+	NombreCliente    string                         `json:"nombre_cliente"`
 	DireccionEntrega string                         `json:"direccion_entrega"`
 	Productos        []repository.ItemDetallePedido `json:"productos"`
 }
 
-// GET /api/pedidos/{id} - RF-04, incluye el detalle de productos del pedido
 func (h *PedidoHandler) ConsultarPedido(w http.ResponseWriter, r *http.Request) {
 	idParam := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idParam)
@@ -134,6 +128,7 @@ func (h *PedidoHandler) ConsultarPedido(w http.ResponseWriter, r *http.Request) 
 		FechaCreacion:    pedido.FechaCreacion,
 		Estado:           pedido.Estado,
 		IDCliente:        pedido.IDCliente,
+		NombreCliente:    pedido.NombreCliente,
 		DireccionEntrega: pedido.DireccionEntrega,
 		Productos:        items,
 	}
@@ -142,7 +137,6 @@ func (h *PedidoHandler) ConsultarPedido(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(respuesta)
 }
 
-// GET /api/mis-pedidos?cliente_id=... - Mis pedidos (Cliente)
 func (h *PedidoHandler) ListarMisPedidos(w http.ResponseWriter, r *http.Request) {
 	clienteIDParam := r.URL.Query().Get("cliente_id")
 	clienteID, err := uuid.Parse(clienteIDParam)
@@ -166,15 +160,12 @@ type CancelarPedidoRequest struct {
 }
 
 var estadosCancelables = map[string]bool{
-	"Pendiente":                true,
-	"En espera por inventario": true,
-	"En recoleccion":           true,
-	"En empaque":               true,
+	"Pendiente":                 true,
+	"En espera por inventario":  true,
+	"En recoleccion":            true,
+	"En empaque":                true,
 }
 
-// POST /api/pedidos/{id}/cancelar - Cliente (dueno del pedido) o Administrador.
-// Libera el stock reservado (si lo habia) y marca el pedido como "Cancelado".
-// No se puede cancelar una vez el pedido esta "En despacho" o mas adelante.
 func (h *PedidoHandler) CancelarPedido(w http.ResponseWriter, r *http.Request) {
 	idParam := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idParam)
@@ -184,7 +175,7 @@ func (h *PedidoHandler) CancelarPedido(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req CancelarPedidoRequest
-	json.NewDecoder(r.Body).Decode(&req) // el body es opcional (Admin puede omitirlo)
+	json.NewDecoder(r.Body).Decode(&req)
 
 	pedido, err := h.Repo.ConsultarPorID(r.Context(), id)
 	if err != nil {

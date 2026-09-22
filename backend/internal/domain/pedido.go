@@ -11,5 +11,6 @@ type Pedido struct {
 	FechaCreacion    time.Time `json:"fecha_creacion"`
 	Estado           string    `json:"estado"`
 	IDCliente        uuid.UUID `json:"id_cliente"`
+	NombreCliente    string    `json:"nombre_cliente"`
 	DireccionEntrega string    `json:"direccion_entrega"`
 }

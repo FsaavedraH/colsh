@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { colorPorEstado } from "@/lib/estadoColor";
 import Badge from "@/components/ui/Badge";
 
 interface EventoPendiente {
@@ -82,6 +83,7 @@ export default function LedgerPendientesPage() {
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500 text-left">
                 <tr>
@@ -99,7 +101,7 @@ export default function LedgerPendientesPage() {
                       {e.id_pedido.slice(0, 8).toUpperCase()}
                     </td>
                     <td className="px-4 py-3">
-                      <Badge color="yellow">{e.estado}</Badge>
+                      <Badge color={colorPorEstado(e.estado)}>{e.estado}</Badge>
                     </td>
                     <td className="px-4 py-3">{formatearFecha(e.fecha_evento_real)}</td>
                     <td className="px-4 py-3">
@@ -116,6 +118,7 @@ export default function LedgerPendientesPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </>
       )}
