@@ -49,6 +49,43 @@ interface EventoTrazabilidad {
   responsable: string;
 }
 
+interface UsuarioResumen {
+  id_usuario: string;
+  nombre: string;
+  email: string;
+  rol: string;
+}
+
+const paletaAvatares = [
+  "bg-blue-100 text-blue-700",
+  "bg-purple-100 text-purple-700",
+  "bg-teal-100 text-teal-700",
+  "bg-orange-100 text-orange-700",
+  "bg-pink-100 text-pink-700",
+  "bg-emerald-100 text-emerald-700",
+];
+
+function colorAvatar(nombre: string): string {
+  let hash = 0;
+  for (let i = 0; i < nombre.length; i++) hash = (hash * 31 + nombre.charCodeAt(i)) >>> 0;
+  return paletaAvatares[hash % paletaAvatares.length];
+}
+
+function iniciales(nombre: string): string {
+  const partes = nombre.trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return "?";
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+  return (partes[0][0] + partes[1][0]).toUpperCase();
+}
+
+function formatearDuracion(segundos: number): string {
+  const s = Math.max(0, Math.round(segundos));
+  if (s < 60) return `${s} s`;
+  const minutos = Math.floor(s / 60);
+  const resto = s % 60;
+  return resto > 0 ? `${minutos} min ${resto} s` : `${minutos} min`;
+}
+
 const colorTarjeta: Record<string, string> = {
   "Pendiente": "bg-gray-100 text-gray-700",
   "En espera por inventario": "bg-red-100 text-red-700",
@@ -114,6 +151,7 @@ export default function ReportesPage() {
   const [eventos, setEventos] = useState<EventoTrazabilidad[]>([]);
   const [cargandoEventos, setCargandoEventos] = useState(false);
   const [errorEventos, setErrorEventos] = useState("");
+  const [nombresPorId, setNombresPorId] = useState<Record<string, string>>({});
 
   useEffect(() => {
     cargarDatos();
@@ -124,7 +162,7 @@ export default function ReportesPage() {
     setError("");
     try {
       const query = filtroEstado ? `?estado=${encodeURIComponent(filtroEstado)}` : "";
-      const [pedidosData, tiemposData, incidenciasData, conteosData, productosTopData, pedidosPorDiaData] =
+      const [pedidosData, tiemposData, incidenciasData, conteosData, productosTopData, pedidosPorDiaData, usuariosData] =
         await Promise.all([
           apiFetch<Pedido[]>(`/api/reportes/pedidos${query}`, { rol: "Administrador" }),
           apiFetch<TiempoEtapa[]>("/api/reportes/tiempos", { rol: "Administrador" }),
@@ -132,6 +170,7 @@ export default function ReportesPage() {
           apiFetch<ConteoEstado[]>("/api/reportes/conteo-estados", { rol: "Administrador" }),
           apiFetch<ProductoTop[]>("/api/reportes/productos-top", { rol: "Administrador" }),
           apiFetch<PedidoPorDia[]>("/api/reportes/pedidos-por-dia", { rol: "Administrador" }),
+          apiFetch<UsuarioResumen[]>("/api/usuarios", { rol: "Administrador" }).catch(() => []),
         ]);
       setPedidos(pedidosData || []);
       setTiempos(tiemposData || []);
@@ -139,11 +178,20 @@ export default function ReportesPage() {
       setConteos(conteosData || []);
       setProductosTop(productosTopData || []);
       setPedidosPorDia(pedidosPorDiaData || []);
+      const mapa: Record<string, string> = {};
+      (usuariosData || []).forEach((u) => {
+        mapa[u.id_usuario] = u.nombre;
+      });
+      setNombresPorId(mapa);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setCargando(false);
     }
+  }
+
+  function nombreResponsable(idORNombre: string): string {
+    return nombresPorId[idORNombre] || idORNombre;
   }
 
   async function verTrazabilidad(idPedido: string) {
@@ -267,7 +315,7 @@ export default function ReportesPage() {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid md:grid-cols-2 gap-4 items-start">
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex justify-between items-center mb-4">
             <h2 className="font-semibold">Listado de pedidos</h2>
@@ -320,8 +368,15 @@ export default function ReportesPage() {
           )}
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-semibold mb-4">Trazabilidad (Hyperledger Fabric)</h2>
+        <div className="bg-white rounded-xl border border-gray-200 p-5 sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
+          <div className="flex justify-between items-baseline mb-4">
+            <h2 className="font-semibold">Trazabilidad por fases</h2>
+            {pedidoSeleccionado && (
+              <span className="text-xs text-gray-400">
+                Hyperledger Fabric · {pedidoSeleccionado.slice(0, 8).toUpperCase()}
+              </span>
+            )}
+          </div>
 
           {!pedidoSeleccionado && (
             <p className="text-gray-400 text-sm">Selecciona un pedido de la tabla para ver su historial en el ledger.</p>
@@ -329,10 +384,6 @@ export default function ReportesPage() {
 
           {pedidoSeleccionado && (
             <>
-              <p className="text-xs text-gray-500 font-mono mb-3">
-                {pedidoSeleccionado.slice(0, 8).toUpperCase()}
-              </p>
-
               {cargandoEventos && <p className="text-gray-500 text-sm">Consultando ledger...</p>}
 
               {errorEventos && (
@@ -345,22 +396,76 @@ export default function ReportesPage() {
                 <p className="text-gray-400 text-sm">Sin eventos registrados en el ledger.</p>
               )}
 
-              <div className="space-y-3">
-                {eventos.map((ev, i) => (
-                  <div key={ev.id_evento} className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-                      {i < eventos.length - 1 && <div className="w-px flex-1 bg-gray-200" />}
-                    </div>
-                    <div className="pb-3">
-                      <div className="text-sm font-semibold">{ev.estado}</div>
-                      <div className="text-xs text-gray-400">
-                        {new Date(ev.fecha).toLocaleString("es-CO")}
-                      </div>
-                    </div>
+              {!cargandoEventos && !errorEventos && eventos.length > 0 && (
+                <>
+                  <div>
+                    {eventos.map((ev, i) => {
+                      const esUltimo = i === eventos.length - 1;
+                      const segundosHastaSiguiente = esUltimo
+                        ? 0
+                        : (new Date(eventos[i + 1].fecha).getTime() - new Date(ev.fecha).getTime()) / 1000;
+                      const segundosAcumulados =
+                        (new Date(ev.fecha).getTime() - new Date(eventos[0].fecha).getTime()) / 1000;
+                      const nombre = ev.responsable ? nombreResponsable(ev.responsable) : "";
+
+                      return (
+                        <div key={ev.id_evento} className="flex gap-3">
+                          <div className="flex flex-col items-center">
+                            <div className="w-2.5 h-2.5 rounded-full bg-blue-600 mt-1.5 shrink-0" />
+                            {!esUltimo && <div className="w-px flex-1 bg-gray-200" />}
+                          </div>
+                          <div className={`flex-1 flex justify-between items-start ${esUltimo ? "pb-1" : "pb-5"}`}>
+                            <div>
+                              <div className="text-sm font-semibold">{ev.estado}</div>
+                              <div className="text-xs text-gray-400 mt-0.5">
+                                {new Date(ev.fecha).toLocaleDateString("es-CO")} ·{" "}
+                                {new Date(ev.fecha).toLocaleTimeString("es-CO", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  second: "2-digit",
+                                })}
+                              </div>
+                              {nombre && (
+                                <div className="flex items-center gap-1.5 mt-1.5">
+                                  <div
+                                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${colorAvatar(
+                                      nombre
+                                    )}`}
+                                  >
+                                    {iniciales(nombre)}
+                                  </div>
+                                  <span className="text-xs text-gray-600">{nombre}</span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0 pl-3">
+                              <div className="text-sm font-semibold text-gray-700">
+                                {formatearDuracion(esUltimo ? segundosAcumulados : segundosHastaSiguiente)}
+                              </div>
+                              <div className="text-[11px] text-gray-400">
+                                {esUltimo ? "tiempo acumulado" : "hasta siguiente fase"}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
+
+                  {eventos.length > 1 && (
+                    <div className="flex justify-between items-center bg-gray-50 rounded-lg px-4 py-3 mt-1">
+                      <span className="text-xs text-gray-500">Tiempo total desde creación hasta entrega</span>
+                      <span className="text-sm font-bold">
+                        {formatearDuracion(
+                          (new Date(eventos[eventos.length - 1].fecha).getTime() -
+                            new Date(eventos[0].fecha).getTime()) /
+                            1000
+                        )}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
             </>
           )}
         </div>
