@@ -89,6 +89,20 @@ func (r *PedidoRepository) ActualizarEstado(ctx context.Context, id uuid.UUID, n
 	return err
 }
 
+// RegistrarEventoTrazabilidad inserta un evento en la tabla local evento_trazabilidad,
+// independiente del registro en el ledger de Hyperledger Fabric (que se maneja aparte
+// via registrarEnLedgerOEncolar). Sin esto, el historial completo del pedido (RF-24)
+// y los reportes de tiempo por etapa quedan incompletos para los estados que solo
+// pasaban por el ledger: creacion, cancelacion y confirmacion de recoleccion.
+func (r *PedidoRepository) RegistrarEventoTrazabilidad(ctx context.Context, idPedido uuid.UUID, estado string, responsable uuid.UUID) error {
+	_, err := r.Pool.Exec(ctx,
+		`INSERT INTO evento_trazabilidad (id_evento, id_pedido, estado, fecha, responsable)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		uuid.New(), idPedido, estado, time.Now().UTC(), responsable,
+	)
+	return err
+}
+
 func (r *PedidoRepository) ObtenerProductosDelPedido(ctx context.Context, idPedido uuid.UUID) ([]ProductoPedidoInput, error) {
 	rows, err := r.Pool.Query(ctx,
 		`SELECT id_producto, cantidad FROM detalle_pedido WHERE id_pedido = $1`, idPedido,

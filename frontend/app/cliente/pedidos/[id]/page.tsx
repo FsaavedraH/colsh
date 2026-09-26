@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { colorPorEstado } from "@/lib/estadoColor";
 import Badge from "@/components/ui/Badge";
+import RutaProtegida from "@/components/layout/RutaProtegida";
 
 interface ItemPedido {
   nombre: string;
@@ -24,7 +25,7 @@ interface Pedido {
 const ETAPAS = ["Pendiente", "En recoleccion", "En empaque", "En despacho", "Entregado"];
 const ESTADOS_CANCELABLES = ["Pendiente", "En espera por inventario", "En recoleccion", "En empaque"];
 
-export default function ConsultaPedidoPage() {
+function ConsultaPedido() {
   const params = useParams();
   const router = useRouter();
   const { usuario } = useAuth();
@@ -206,5 +207,13 @@ export default function ConsultaPedidoPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ConsultaPedidoPage() {
+  return (
+    <RutaProtegida rolPermitido="Cliente">
+      <ConsultaPedido />
+    </RutaProtegida>
   );
 }

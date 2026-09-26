@@ -51,7 +51,7 @@ func (h *PedidoHandler) CrearPedido(w http.ResponseWriter, r *http.Request) {
 
 	pedido := domain.Pedido{
 		IDPedido:         uuid.New(),
-		FechaCreacion:    time.Now(),
+		FechaCreacion:    time.Now().UTC(),
 		Estado:           "Pendiente",
 		IDCliente:        clienteID,
 		DireccionEntrega: req.DireccionEntrega,
@@ -80,6 +80,7 @@ func (h *PedidoHandler) CrearPedido(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	_ = h.Repo.RegistrarEventoTrazabilidad(r.Context(), pedido.IDPedido, estadoFinal, clienteID)
 	registrarEnLedgerOEncolar(r.Context(), h.Ledger, h.ColaLedgerRepo, pedido.IDPedido, estadoFinal, req.ClienteID)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -216,6 +217,10 @@ func (h *PedidoHandler) CancelarPedido(w http.ResponseWriter, r *http.Request) {
 	if rol == "Administrador" {
 		responsable = "Administrador"
 	}
+	// La tabla local evento_trazabilidad exige un UUID valido en "responsable",
+	// asi que aqui se usa siempre el cliente dueno del pedido; "Administrador"
+	// como texto solo aplica al registro humano-legible en el ledger.
+	_ = h.Repo.RegistrarEventoTrazabilidad(r.Context(), id, "Cancelado", pedido.IDCliente)
 	registrarEnLedgerOEncolar(r.Context(), h.Ledger, h.ColaLedgerRepo, id, "Cancelado", responsable)
 
 	w.Header().Set("Content-Type", "application/json")

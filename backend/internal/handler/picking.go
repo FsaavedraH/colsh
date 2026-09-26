@@ -72,10 +72,10 @@ func (h *PickingHandler) ListarHistorial(w http.ResponseWriter, r *http.Request)
 }
 
 type SiguienteItemResponse struct {
-	Completo   bool                          `json:"completo"`
+	Completo   bool                           `json:"completo"`
 	Item       *repository.ItemDetallePedido `json:"item,omitempty"`
-	Procesados int                           `json:"procesados"`
-	TotalItems int                           `json:"total_items"`
+	Procesados int                            `json:"procesados"`
+	TotalItems int                            `json:"total_items"`
 }
 
 // GET /api/picking/{id}/siguiente-item - RF-09, RF-10, RF-14. Devuelve el proximo
@@ -314,6 +314,7 @@ func (h *PickingHandler) ConfirmarRecoleccion(w http.ResponseWriter, r *http.Req
 		http.Error(w, `{"error":"No se pudo actualizar el estado del pedido"}`, http.StatusInternalServerError)
 		return
 	}
+	_ = h.PedidoRepo.RegistrarEventoTrazabilidad(r.Context(), idPedido, "En recoleccion", responsable)
 	registrarEnLedgerOEncolar(r.Context(), h.Ledger, h.ColaLedgerRepo, idPedido, "En recoleccion", req.Responsable)
 
 	json.NewEncoder(w).Encode(map[string]interface{}{

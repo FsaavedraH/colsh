@@ -17,7 +17,7 @@ func (r *DespachoRepository) RegistrarEvento(ctx context.Context, idPedido uuid.
 	_, err := r.Pool.Exec(ctx,
 		`INSERT INTO evento_trazabilidad (id_evento, id_pedido, estado, fecha, responsable)
 		 VALUES ($1, $2, $3, $4, $5)`,
-		uuid.New(), idPedido, estado, time.Now(), responsable,
+		uuid.New(), idPedido, estado, time.Now().UTC(), responsable,
 	)
 	return err
 }

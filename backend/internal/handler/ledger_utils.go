@@ -16,7 +16,7 @@ import (
 // sin perder informacion ni alterar el momento real del evento.
 func registrarEnLedgerOEncolar(ctx context.Context, ledgerAdapter *ledger.LedgerAdapter, colaRepo *repository.ColaLedgerRepository, idPedido uuid.UUID, estado, responsable string) {
 	idEvento := uuid.New().String()
-	fechaEvento := time.Now()
+	fechaEvento := time.Now().UTC()
 	fechaStr := fechaEvento.Format(time.RFC3339)
 
 	if ledgerAdapter != nil {

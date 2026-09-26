@@ -64,7 +64,7 @@ export default function EscanearProductoPage() {
       setResultado({ tipo: "ok", mensaje: "Producto correcto, listo para confirmar recolección" });
       setTimeout(() => {
         router.push(`/picking/${idPedido}/confirmar`);
-      }, 1200);
+      }, 400);
     } catch (err: any) {
       setResultado({ tipo: "error", mensaje: err.message });
     } finally {
@@ -72,9 +72,15 @@ export default function EscanearProductoPage() {
     }
   }
 
+  function reintentar() {
+    setResultado(null);
+  }
+
   if (cargando) return <p className="text-gray-500">Cargando pedido...</p>;
   if (errorCarga) return <p className="text-red-600">Error: {errorCarga}</p>;
   if (!item) return <p className="text-gray-500">Este pedido no tiene productos pendientes.</p>;
+
+  const pausado = verificando || resultado !== null;
 
   return (
     <div className="max-w-md">
@@ -100,7 +106,7 @@ export default function EscanearProductoPage() {
         Escanea el código QR pegado en la caja/empaque del producto.
       </p>
 
-      <ScanBox onScan={manejarEscaneo} />
+      <ScanBox onScan={manejarEscaneo} pausado={pausado} />
 
       {resultado && (
         <div
@@ -108,7 +114,15 @@ export default function EscanearProductoPage() {
             resultado.tipo === "ok" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
           }`}
         >
-          {resultado.mensaje}
+          <p>{resultado.mensaje}</p>
+          {resultado.tipo === "error" && (
+            <button
+              onClick={reintentar}
+              className="mt-2 text-sm font-semibold text-red-700 underline"
+            >
+              Escanear de nuevo
+            </button>
+          )}
         </div>
       )}
     </div>

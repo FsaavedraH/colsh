@@ -38,11 +38,11 @@ export default function CatalogoPage() {
   const { usuario } = useAuth();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [cantidades, setCantidades] = useState<Record<string, number>>({});
-  const [direccion, setDireccion] = useState("Cra 50 #10-25");
+  const [direccion, setDireccion] = useState("");
   const [cargando, setCargando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
-  const [mostrarResumen, setMostrarResumen] = useState(false);
+  const [confirmandoDireccion, setConfirmandoDireccion] = useState(false);
 
   useEffect(() => {
     cargarCatalogo();
@@ -55,8 +55,7 @@ export default function CatalogoPage() {
       try {
         const { cantidades: c, direccion: d } = JSON.parse(guardado);
         setCantidades(c || {});
-        setDireccion(d || "Cra 50 #10-25");
-        setMostrarResumen(true);
+        setDireccion(d || "");
       } catch {
         // si el JSON guardado esta corrupto, simplemente lo ignoramos
       }
@@ -84,6 +83,13 @@ export default function CatalogoPage() {
     });
   }
 
+  function quitarProducto(idProducto: string) {
+    setCantidades((prev) => {
+      const { [idProducto]: _omitido, ...resto } = prev;
+      return resto;
+    });
+  }
+
   function precioDe(idProd: string) {
     return productos.find((p) => p.id_producto === idProd)?.costo_unitario ?? 0;
   }
@@ -103,7 +109,7 @@ export default function CatalogoPage() {
 
   const esRolNoCliente = usuario !== null && usuario.rol !== "Cliente";
 
-  async function crearPedido() {
+  function intentarConfirmar() {
     if (productosSeleccionados.length === 0) return;
 
     if (!usuario) {
@@ -122,6 +128,21 @@ export default function CatalogoPage() {
       return;
     }
 
+    if (!direccion.trim()) {
+      setError("Ingresa una dirección de entrega antes de continuar.");
+      return;
+    }
+
+    // No se crea el pedido todavia: primero se pide confirmar la direccion
+    // explicitamente, para que no se envie por accidente con el valor de
+    // ejemplo sin que el cliente lo haya revisado.
+    setError("");
+    setConfirmandoDireccion(true);
+  }
+
+  async function crearPedido() {
+    if (!usuario) return;
+
     setEnviando(true);
     setError("");
 
@@ -138,8 +159,10 @@ export default function CatalogoPage() {
           })),
         }),
       });
+      setConfirmandoDireccion(false);
       router.push(`/cliente/pedidos/${data.id_pedido}`);
     } catch (err: any) {
+      setConfirmandoDireccion(false);
       setError(err.message);
     } finally {
       setEnviando(false);
@@ -200,65 +223,47 @@ export default function CatalogoPage() {
 
       {totalItems > 0 && (
         <div className="fixed bottom-0 left-0 right-0 md:left-56 bg-white border-t border-gray-200 shadow-lg z-40">
-          {mostrarResumen && (
-            <div className="border-b border-gray-100 p-4 max-w-md ml-auto mr-4 max-h-64 overflow-y-auto">
-              <p className="text-xs font-semibold text-gray-500 mb-2">Resumen del pedido</p>
-              <div className="space-y-1 mb-3">
-                {productosSeleccionados.map(([id, cant]) => (
-                  <div key={id} className="flex justify-between text-sm text-gray-600">
-                    <span className="truncate pr-2">
-                      {nombreDe(id)} x{cant}
-                    </span>
-                    <span className="shrink-0">{formatearCOP(precioDe(id) * cant)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="border-t border-gray-100 pt-2 space-y-1 text-sm">
-                <div className="flex justify-between text-gray-500">
-                  <span>Subtotal</span>
-                  <span>{formatearCOP(subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-gray-500">
-                  <span>IVA (19%)</span>
-                  <span>{formatearCOP(iva)}</span>
-                </div>
-                <div className="flex justify-between font-semibold text-gray-900 text-base pt-1">
-                  <span>Total</span>
-                  <span>{formatearCOP(total)}</span>
-                </div>
-              </div>
-
-              <label className="text-sm text-gray-500 block mb-1 mt-4">Dirección de entrega</label>
-              <input
-                type="text"
-                value={direccion}
-                onChange={(e) => setDireccion(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              />
-              {!usuario && (
-                <p className="text-xs text-amber-600 mt-2">
-                  Necesitas iniciar sesión para confirmar tu pedido.
-                </p>
-              )}
-              {esRolNoCliente && (
-                <p className="text-xs text-red-600 mt-2">
-                  Tu sesión actual ({usuario?.rol}) no puede confirmar pedidos. Cierra sesión e
-                  inicia con una cuenta de Cliente.
-                </p>
-              )}
+          <div className="px-4 pt-3 max-h-40 overflow-y-auto">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600 mb-2">
+              {productosSeleccionados.map(([id, cant]) => (
+                <span key={id} className="whitespace-nowrap inline-flex items-center gap-1">
+                  {nombreDe(id)} x{cant}
+                  <span className="text-gray-400"> · {formatearCOP(precioDe(id) * cant)}</span>
+                  <button
+                    onClick={() => quitarProducto(id)}
+                    className="text-gray-400 hover:text-red-600 font-bold px-1"
+                    aria-label={`Quitar ${nombreDe(id)} del carrito`}
+                    title="Quitar del carrito"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
             </div>
-          )}
+            <div className="flex flex-wrap gap-x-4 text-xs text-gray-500 border-t border-gray-100 pt-2">
+              <span>Subtotal: {formatearCOP(subtotal)}</span>
+              <span>IVA (19%): {formatearCOP(iva)}</span>
+            </div>
+          </div>
 
-          <div className="flex items-center justify-between px-4 py-3 max-w-4xl mx-auto">
-            <button
-              onClick={() => setMostrarResumen((v) => !v)}
-              className="text-sm font-medium text-gray-700 hover:text-gray-900"
-            >
-              🛒 {totalItems} ítem{totalItems !== 1 ? "s" : ""} · {formatearCOP(total)}{" "}
-              <span className="text-gray-400">{mostrarResumen ? "▾" : "▸"}</span>
-            </button>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3">
+            <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
+              🛒 {totalItems} ítem{totalItems !== 1 ? "s" : ""}
+            </span>
 
-            <Button onClick={crearPedido} disabled={enviando || esRolNoCliente}>
+            <input
+              type="text"
+              value={direccion}
+              onChange={(e) => setDireccion(e.target.value)}
+              placeholder="Dirección de entrega — Ej: Cra 50 #10-25, Cartagena"
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-0"
+            />
+
+            <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">
+              Total: {formatearCOP(total)}
+            </span>
+
+            <Button onClick={intentarConfirmar} disabled={enviando || esRolNoCliente}>
               {enviando
                 ? "Creando pedido..."
                 : !usuario
@@ -267,6 +272,78 @@ export default function CatalogoPage() {
                 ? "No disponible con este rol"
                 : "Confirmar pedido"}
             </Button>
+          </div>
+          {!usuario && (
+            <p className="text-xs text-amber-600 px-4 pb-2">
+              Necesitas iniciar sesión para confirmar tu pedido.
+            </p>
+          )}
+          {esRolNoCliente && (
+            <p className="text-xs text-red-600 px-4 pb-2">
+              Tu sesión actual ({usuario?.rol}) no puede confirmar pedidos. Cierra sesión e inicia
+              con una cuenta de Cliente.
+            </p>
+          )}
+        </div>
+      )}
+
+      {confirmandoDireccion && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full">
+            <h2 className="text-lg font-bold mb-1">Ingresa tu ubicación de entrega</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Confirma o corrige la dirección antes de crear el pedido.
+            </p>
+
+            <div className="space-y-1 mb-3 max-h-32 overflow-y-auto">
+              {productosSeleccionados.map(([id, cant]) => (
+                <div key={id} className="flex justify-between text-sm text-gray-600">
+                  <span className="truncate pr-2">
+                    {nombreDe(id)} x{cant}
+                  </span>
+                  <span className="shrink-0">{formatearCOP(precioDe(id) * cant)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-b border-gray-100 py-2 space-y-1 text-sm mb-4">
+              <div className="flex justify-between text-gray-500">
+                <span>Subtotal</span>
+                <span>{formatearCOP(subtotal)}</span>
+              </div>
+              <div className="flex justify-between text-gray-500">
+                <span>IVA (19%)</span>
+                <span>{formatearCOP(iva)}</span>
+              </div>
+              <div className="flex justify-between font-semibold text-gray-900 text-base pt-1">
+                <span>Total</span>
+                <span>{formatearCOP(total)}</span>
+              </div>
+            </div>
+
+            <label className="text-sm text-gray-500 block mb-1">Dirección de entrega</label>
+            <input
+              type="text"
+              value={direccion}
+              onChange={(e) => setDireccion(e.target.value)}
+              placeholder="Ej: Cra 50 #10-25, Cartagena"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4"
+              autoFocus
+            />
+
+            {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+
+            <div className="flex flex-col gap-2">
+              <Button onClick={crearPedido} disabled={enviando || !direccion.trim()}>
+                {enviando ? "Creando pedido..." : "Sí, confirmar y crear pedido"}
+              </Button>
+              <button
+                onClick={() => setConfirmandoDireccion(false)}
+                disabled={enviando}
+                className="text-sm text-gray-600 hover:underline py-2"
+              >
+                No, quiero revisar la dirección
+              </button>
+            </div>
           </div>
         </div>
       )}
